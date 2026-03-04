@@ -963,6 +963,17 @@ function Summary({ participants, evaluations, tbdAssignments, participantInfo, p
   );
 }
 
+// Mobile detection hook
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+  return isMobile;
+}
+
 function App() {
   // --- Supabase Sync ---
   const [idx, setIdx] = useState(0);
@@ -972,6 +983,8 @@ function App() {
   const [program, setProgram] = useState(null);
   const [initialized, setInitialized] = useState({});
   const [showGroupPhoto, setShowGroupPhoto] = useState(false);
+  const [showSidebar, setShowSidebar] = useState(false);
+  const isMobile = useIsMobile();
   const [tbdAssignments, setTbdAssignments] = useState({
     tbd1: { name: "Mareike Braach", apotheke: "Schloss Apo", ort: "Siegen", plz: "57072", partner: false, ptaFamily: false, kooperation: "Elac", adm: "Kristina Roth" }
   });
@@ -1130,23 +1143,55 @@ function App() {
 
   return (
     <div style={{ width: "100vw", height: "100vh", display: "flex", flexDirection: "column", background: BG, overflow: "hidden" }}>
-      {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 20px", background: "#fff", borderBottom: "1px solid #E5E7EB", flexShrink: 0 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-          <Logo />
-          <div style={{ width: 1, height: 24, background: "#E5E7EB" }} />
-          <span style={{ fontFamily: "Trebuchet MS, sans-serif", fontSize: 14, fontWeight: 700, color: PETROL }}>Sounding Board</span>
-          <span style={{ fontFamily: "Trebuchet MS, sans-serif", fontSize: 12, color: program === "apo" ? ORANGE : "#9CA3AF", background: program === "apo" ? "#FFF8EE" : "#F3F4F6", padding: "2px 8px", borderRadius: 4, fontWeight: 600 }}>
-            {program === "apo" ? "APO THINK!" : "PTA THINK!"}
+      {/* Header - Mobile responsive */}
+      <div style={{
+        display: "flex",
+        flexDirection: isMobile ? "column" : "row",
+        alignItems: "center",
+        justifyContent: "space-between",
+        padding: isMobile ? "8px 12px" : "10px 20px",
+        background: "#fff",
+        borderBottom: "1px solid #E5E7EB",
+        flexShrink: 0,
+        gap: isMobile ? 8 : 0
+      }}>
+        {/* First row: Logo + Badge + Menu toggle */}
+        <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 10 : 16, width: isMobile ? "100%" : "auto" }}>
+          <Logo size={isMobile ? "small" : "normal"} />
+          {!isMobile && <div style={{ width: 1, height: 24, background: "#E5E7EB" }} />}
+          {!isMobile && (
+            <span style={{ fontFamily: "Trebuchet MS, sans-serif", fontSize: 14, fontWeight: 700, color: PETROL }}>Sounding Board</span>
+          )}
+          <span style={{ fontFamily: "Trebuchet MS, sans-serif", fontSize: isMobile ? 10 : 12, color: program === "apo" ? ORANGE : "#9CA3AF", background: program === "apo" ? "#FFF8EE" : "#F3F4F6", padding: isMobile ? "1px 6px" : "2px 8px", borderRadius: 4, fontWeight: 600 }}>
+            {program === "apo" ? "APO" : "PTA"}
           </span>
-          <button onClick={() => { setView("select_program"); setIdx(0); }} style={{
-            padding: "3px 8px", borderRadius: 4, border: "1px solid #E5E7EB",
-            background: "transparent", color: "#9CA3AF", fontFamily: "Trebuchet MS, sans-serif",
-            fontSize: 10, cursor: "pointer"
-          }}>wechseln</button>
+          {!isMobile && (
+            <button onClick={() => { setView("select_program"); setIdx(0); }} style={{
+              padding: "3px 8px", borderRadius: 4, border: "1px solid #E5E7EB",
+              background: "transparent", color: "#9CA3AF", fontFamily: "Trebuchet MS, sans-serif",
+              fontSize: 10, cursor: "pointer"
+            }}>wechseln</button>
+          )}
+          {isMobile && (
+            <button onClick={() => setShowSidebar(!showSidebar)} style={{
+              marginLeft: "auto",
+              padding: "6px 10px", borderRadius: 4, border: "1.5px solid #E5E7EB",
+              background: "#fff", color: "#6B7280", fontFamily: "Trebuchet MS, sans-serif",
+              fontSize: 16, cursor: "pointer"
+            }}>☰</button>
+          )}
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-          {((program === "pta" && PHOTOS.group_photo) || (program === "apo" && PHOTOS.apo_group_photo)) && (
+
+        {/* Second row (desktop) or compact controls (mobile) */}
+        <div style={{
+          display: "flex",
+          alignItems: "center",
+          gap: isMobile ? 8 : 14,
+          width: isMobile ? "100%" : "auto",
+          justifyContent: isMobile ? "space-between" : "flex-end",
+          fontSize: isMobile ? 11 : 12
+        }}>
+          {!isMobile && ((program === "pta" && PHOTOS.group_photo) || (program === "apo" && PHOTOS.apo_group_photo)) && (
             <button onClick={() => setShowGroupPhoto(true)} style={{
               padding: "5px 12px", borderRadius: 6, border: "1.5px solid #E5E7EB",
               background: "#fff", color: "#6B7280",
@@ -1155,23 +1200,39 @@ function App() {
             }}>{"\uD83D\uDCF7"} Gruppenfoto</button>
           )}
           <ProgressBar total={currentParticipants.length} completed={done} />
-          <div style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, color: syncStatus === "error" ? "#EF4444" : "#9CA3AF" }} title={syncStatus === "synced" ? "Gespeichert" : syncStatus === "saving" ? "Speichert..." : syncStatus === "error" ? "Sync-Fehler" : "Laden..."}>
-            <span style={{ width: 8, height: 8, borderRadius: "50%", background: syncStatus === "synced" ? "#10B981" : syncStatus === "saving" ? ORANGE : syncStatus === "error" ? "#EF4444" : "#9CA3AF" }}></span>
-            {syncStatus === "synced" ? "Gespeichert" : syncStatus === "saving" ? "Speichert..." : syncStatus === "error" ? "Sync-Fehler" : "Laden..."}
+          <div style={{ display: "flex", alignItems: "center", gap: 4, fontSize: isMobile ? 10 : 11, color: syncStatus === "error" ? "#EF4444" : "#9CA3AF", minWidth: isMobile ? "auto" : "100px" }} title={syncStatus === "synced" ? "Gespeichert" : syncStatus === "saving" ? "Speichert..." : syncStatus === "error" ? "Sync-Fehler" : "Laden..."}>
+            <span style={{ width: 6, height: 6, borderRadius: "50%", background: syncStatus === "synced" ? "#10B981" : syncStatus === "saving" ? ORANGE : syncStatus === "error" ? "#EF4444" : "#9CA3AF", flexShrink: 0 }}></span>
+            {isMobile ? (syncStatus === "synced" ? "✓" : syncStatus === "saving" ? "⟳" : syncStatus === "error" ? "✕" : "…") : (syncStatus === "synced" ? "Gespeichert" : syncStatus === "saving" ? "Speichert..." : syncStatus === "error" ? "Sync-Fehler" : "Laden...")}
           </div>
           <button onClick={() => setView(view === "eval" ? "summary" : "eval")} style={{
-            padding: "7px 16px", borderRadius: 6, border: "1.5px solid " + PETROL,
+            padding: isMobile ? "5px 10px" : "7px 16px", borderRadius: 6, border: "1.5px solid " + PETROL,
             background: view === "summary" ? PETROL : "#fff",
             color: view === "summary" ? "#fff" : PETROL,
-            fontFamily: "Trebuchet MS, sans-serif", fontSize: 13, fontWeight: 600, cursor: "pointer"
-          }}>{view === "summary" ? "\u2190 Zur\u00fcck" : "Zusammenfassung"}</button>
+            fontFamily: "Trebuchet MS, sans-serif", fontSize: isMobile ? 11 : 13, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap"
+          }}>{view === "summary" ? "\u2190" : "Zsfg"}</button>
         </div>
       </div>
 
       {/* Body */}
-      <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
-        <Sidebar participants={currentParticipants} evaluations={currentEvals} currentIdx={view === "eval" ? idx : -1}
-          onSelect={(i) => { setIdx(i); setView("eval"); }} tbdAssignments={currentAssignments} />
+      <div style={{ flex: 1, display: "flex", overflow: "hidden", position: "relative" }}>
+        {/* Mobile Sidebar Overlay */}
+        {isMobile && showSidebar && (
+          <>
+            <div onClick={() => setShowSidebar(false)} style={{
+              position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.4)", zIndex: 10
+            }} />
+            <div style={{ position: "fixed", top: 0, left: 0, width: 250, height: "100%", background: "#fff", overflow: "auto", zIndex: 11, boxShadow: "2px 0 8px rgba(0,0,0,0.1)" }}>
+              <Sidebar participants={currentParticipants} evaluations={currentEvals} currentIdx={view === "eval" ? idx : -1}
+                onSelect={(i) => { setIdx(i); setView("eval"); setShowSidebar(false); }} tbdAssignments={currentAssignments} />
+            </div>
+          </>
+        )}
+
+        {/* Desktop Sidebar */}
+        {!isMobile && (
+          <Sidebar participants={currentParticipants} evaluations={currentEvals} currentIdx={view === "eval" ? idx : -1}
+            onSelect={(i) => { setIdx(i); setView("eval"); }} tbdAssignments={currentAssignments} />
+        )}
 
         {view === "summary" ? (
           <div style={{ flex: 1, overflowY: "auto" }}><Summary
@@ -1183,32 +1244,53 @@ function App() {
           /></div>
         ) : (
           <div style={{ flex: 1, overflowY: "auto", display: "flex", justifyContent: "center" }}>
-            <div style={{ width: "100%", maxWidth: 620, padding: "24px 28px 40px" }}>
-              {/* Person header with LARGE photo + Info */}
-              <div style={{ display: "flex", alignItems: "flex-start", gap: 20, marginBottom: 24, padding: "16px 20px", background: "#fff", borderRadius: 12, border: "1px solid #E5E7EB", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
+            <div style={{ width: "100%", maxWidth: isMobile ? "100%" : 620, padding: isMobile ? "12px 12px 40px" : "24px 28px 40px" }}>
+              {/* Person header with photo + Info - Mobile responsive */}
+              <div style={{
+                display: "flex",
+                flexDirection: isMobile ? "column" : "row",
+                alignItems: isMobile ? "center" : "flex-start",
+                gap: isMobile ? 16 : 20,
+                marginBottom: 24,
+                padding: isMobile ? "12px 14px" : "16px 20px",
+                background: "#fff",
+                borderRadius: 12,
+                border: "1px solid #E5E7EB",
+                boxShadow: "0 1px 3px rgba(0,0,0,0.04)"
+              }}>
                 {PHOTOS[p.key] ? (
                   <img src={PHOTOS[p.key]} alt={displayName} style={{
-                    width: 180, height: 180, borderRadius: "50%", objectFit: "cover",
+                    width: isMobile ? 100 : 180,
+                    height: isMobile ? 100 : 180,
+                    borderRadius: "50%",
+                    objectFit: "cover",
                     border: "3.5px solid " + (program === "apo" ? ORANGE : PETROL),
-                    boxShadow: "0 4px 16px " + (program === "apo" ? "rgba(243,147,35,0.25)" : "rgba(0,126,148,0.25)"), flexShrink: 0
+                    boxShadow: "0 4px 16px " + (program === "apo" ? "rgba(243,147,35,0.25)" : "rgba(0,126,148,0.25)"),
+                    flexShrink: 0
                   }} />
                 ) : (
                   <div style={{
-                    width: 180, height: 180, borderRadius: "50%", flexShrink: 0,
+                    width: isMobile ? 100 : 180,
+                    height: isMobile ? 100 : 180,
+                    borderRadius: "50%",
+                    flexShrink: 0,
                     border: "3.5px solid " + (program === "apo" ? ORANGE : PETROL),
                     background: program === "apo" ? "#FFF8EE" : "#EFF9FA",
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    fontSize: 48, color: program === "apo" ? ORANGE : PETROL
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontSize: isMobile ? 36 : 48,
+                    color: program === "apo" ? ORANGE : PETROL
                   }}>{displayName.charAt(0)}</div>
                 )}
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontFamily: "Trebuchet MS, sans-serif", fontSize: 24, fontWeight: 700, color: BLACK }}>{displayName}</div>
+                <div style={{ flex: 1, textAlign: isMobile ? "center" : "left" }}>
+                  <div style={{ fontFamily: "Trebuchet MS, sans-serif", fontSize: isMobile ? 18 : 24, fontWeight: 700, color: BLACK }}>{displayName}</div>
                   {info.apotheke && (
-                    <div style={{ fontFamily: "Trebuchet MS, sans-serif", fontSize: 13, color: "#6B7280", marginTop: 4 }}>
+                    <div style={{ fontFamily: "Trebuchet MS, sans-serif", fontSize: isMobile ? 11 : 13, color: "#6B7280", marginTop: 4 }}>
                       {info.apotheke} {"\u00b7"} {info.plz} {info.ort}
                     </div>
                   )}
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8, justifyContent: isMobile ? "center" : "flex-start" }}>
                     {info.partner && <InfoBadge value="Partnerprogramm" color={PETROL} />}
                     {!info.partner && info.apotheke && <InfoBadge value="Kein Partner" color="#9CA3AF" />}
                     {info.ptaFamily && <InfoBadge value="PTA Family" color={ORANGE} />}
@@ -1267,44 +1349,76 @@ function App() {
                 />
               )}
 
-              {/* Form */}
-              <div style={{ background: "#fff", borderRadius: 10, padding: "24px 28px", boxShadow: "0 1px 3px rgba(0,0,0,0.05)", border: "1px solid #E5E7EB" }}>
+              {/* Form - Mobile responsive padding */}
+              <div style={{ background: "#fff", borderRadius: 10, padding: isMobile ? "14px 14px" : "24px 28px", boxShadow: "0 1px 3px rgba(0,0,0,0.05)", border: "1px solid #E5E7EB" }}>
                 <EvalForm evaluation={ev} onUpdate={update} criteria={currentCriteria} />
               </div>
 
-              {/* Navigation */}
-              {/* Navigation */}
-              <div style={{ display: "flex", justifyContent: "space-between", marginTop: 20 }}>
+              {/* Navigation - Full width buttons on mobile */}
+              <div style={{ display: "flex", justifyContent: "space-between", gap: isMobile ? 8 : 12, marginTop: 20 }}>
                 <button onClick={() => idx > 0 && setIdx(idx - 1)} disabled={idx === 0} style={{
-                  padding: "10px 22px", borderRadius: 6, border: "1.5px solid #D1D5DB",
-                  background: "#fff", color: idx === 0 ? "#D1D5DB" : BLACK,
-                  fontFamily: "Trebuchet MS, sans-serif", fontSize: 14, fontWeight: 600,
-                  cursor: idx === 0 ? "default" : "pointer", opacity: idx === 0 ? 0.4 : 1
-                }}>{"\u2190"} Zur{"\u00fc"}ck</button>
+                  flex: 1,
+                  padding: isMobile ? "12px 14px" : "10px 22px",
+                  borderRadius: 6,
+                  border: "1.5px solid #D1D5DB",
+                  background: "#fff",
+                  color: idx === 0 ? "#D1D5DB" : BLACK,
+                  fontFamily: "Trebuchet MS, sans-serif",
+                  fontSize: isMobile ? 13 : 14,
+                  fontWeight: 600,
+                  cursor: idx === 0 ? "default" : "pointer",
+                  opacity: idx === 0 ? 0.4 : 1
+                }}>{isMobile ? "\u2190" : "\u2190 Zur\u00fcck"}</button>
                 <button onClick={() => idx < currentParticipants.length - 1 && setIdx(idx + 1)}
                   disabled={idx === currentParticipants.length - 1} style={{
-                  padding: "10px 22px", borderRadius: 6, border: "none",
-                  background: idx === currentParticipants.length - 1 ? "#D1D5DB" : (program === "apo" ? ORANGE : PETROL), color: "#fff",
-                  fontFamily: "Trebuchet MS, sans-serif", fontSize: 14, fontWeight: 600,
+                  flex: 1,
+                  padding: isMobile ? "12px 14px" : "10px 22px",
+                  borderRadius: 6,
+                  border: "none",
+                  background: idx === currentParticipants.length - 1 ? "#D1D5DB" : (program === "apo" ? ORANGE : PETROL),
+                  color: "#fff",
+                  fontFamily: "Trebuchet MS, sans-serif",
+                  fontSize: isMobile ? 13 : 14,
+                  fontWeight: 600,
                   cursor: idx === currentParticipants.length - 1 ? "default" : "pointer",
                   opacity: idx === currentParticipants.length - 1 ? 0.4 : 1
-                }}>Weiter {"\u2192"}</button>
+                }}>{isMobile ? "\u2192" : "Weiter \u2192"}</button>
               </div>
 
-              {/* Excel + Zusammenfassung Buttons */}
-              <div style={{ display: "flex", gap: 10, marginTop: 16, paddingBottom: 24 }}>
+              {/* Excel + Zusammenfassung Buttons - Stacked on mobile */}
+              <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: isMobile ? 8 : 10, marginTop: 16, paddingBottom: 24 }}>
                 <button onClick={downloadExcelGlobal} style={{
-                  flex: 1, padding: "12px 16px", borderRadius: 8, border: "1.5px solid " + PETROL,
-                  background: "#fff", color: PETROL,
-                  fontFamily: "Trebuchet MS, sans-serif", fontSize: 14, fontWeight: 600, cursor: "pointer",
-                  display: "flex", alignItems: "center", justifyContent: "center", gap: 8
-                }}>Excel herunterladen</button>
+                  flex: 1,
+                  padding: isMobile ? "14px 12px" : "12px 16px",
+                  borderRadius: 8,
+                  border: "1.5px solid " + PETROL,
+                  background: "#fff",
+                  color: PETROL,
+                  fontFamily: "Trebuchet MS, sans-serif",
+                  fontSize: isMobile ? 12 : 14,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: isMobile ? 4 : 8
+                }}>{isMobile ? "\uD83D\uDCCA" : "Excel herunterladen"}</button>
                 <button onClick={() => setView("summary")} style={{
-                  flex: 1, padding: "12px 16px", borderRadius: 8, border: "none",
-                  background: ORANGE, color: "#fff",
-                  fontFamily: "Trebuchet MS, sans-serif", fontSize: 14, fontWeight: 600, cursor: "pointer",
-                  display: "flex", alignItems: "center", justifyContent: "center", gap: 8
-                }}>Zusammenfassung {"\u2192"}</button>
+                  flex: 1,
+                  padding: isMobile ? "14px 12px" : "12px 16px",
+                  borderRadius: 8,
+                  border: "none",
+                  background: ORANGE,
+                  color: "#fff",
+                  fontFamily: "Trebuchet MS, sans-serif",
+                  fontSize: isMobile ? 12 : 14,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: isMobile ? 4 : 8
+                }}>{isMobile ? "Zsfg \u2192" : "Zusammenfassung \u2192"}</button>
               </div>
             </div>
           </div>
