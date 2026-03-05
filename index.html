@@ -522,6 +522,7 @@ function ApoNameInput({ onAssign, initialData, apoAssignments, participantKey })
   const [apotheke, setApotheke] = useState(initialData ? initialData.apotheke : "");
   const [saved, setSaved] = useState(!!initialData);
   const [showSuggestions, setShowSuggestions] = useState(!initialData);
+  const [showManual, setShowManual] = useState(false);
 
   // Filter out already-assigned suggestions
   const assignedNames = Object.entries(apoAssignments || {})
@@ -592,8 +593,6 @@ function ApoNameInput({ onAssign, initialData, apoAssignments, participantKey })
       </div>
     );
   }
-
-  const [showManual, setShowManual] = useState(false);
 
   return (
     <div style={{ marginBottom: 16, padding: "14px 16px", background: "#FFF8EE", borderRadius: 8, border: "1.5px dashed " + ORANGE }}>
