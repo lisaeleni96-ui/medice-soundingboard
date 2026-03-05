@@ -137,6 +137,17 @@ for (let i = 1; i <= 13; i++) {
   APO_PARTICIPANTS_TEMPLATE.push({ key: "apo_" + i, name: APO_NAMES[i] || ("Apotheker " + i) });
 }
 
+// Apo Think Teilnehmer-Vorschläge aus Transkript (Sounding Board Nov 2024)
+const APO_SUGGESTIONS = [
+  { vorname: "Marc", nachname: "Christen", apotheke: "2 Apotheken, Düsseldorf", info: "~50 MA, Digitalisierung/KI, Gründer Apotheker-Netzwerk (800+ Teilnehmer)" },
+  { vorname: "Anna", nachname: "Behrendt", apotheke: "3 Apotheken (Köln, Langenfeld, Monheim)", info: "~60 MA, Fokus Zukunft/Kooperationen" },
+  { vorname: "Jan", nachname: "", apotheke: "2 Apotheken", info: "~15 MA, Prävention, Point-of-Care-Tests, war letztes Jahr dabei" },
+  { vorname: "Philipp", nachname: "", apotheke: "2 Apotheken (u.a. Berlin)", info: "~50 MA, ländlich, 4 Botendienstfahrzeuge, Endkundenperspektive" },
+  { vorname: "Carsten", nachname: "", apotheke: "Apotheke im V-Markt", info: "20+ MA, seit 20 J., Franchise, rein Tagesgeschäft, erstes Mal dabei" },
+  { vorname: "Felix", nachname: "", apotheke: "2 Apotheken, Iserlohn", info: "~50 MA, Heimversorgung/Pflege/Sterilherstellung, ex-Bayer" },
+  { vorname: "Florian", nachname: "Bernd", apotheke: "Huma-Shopping-Welt, St. Augustin", info: "30+ J., 1 Apo, digitalisiert/automatisiert, ELAG-Mitglied" },
+];
+
 const LOGO_SVG = '<svg width="200" height="36" viewBox="0 0 2208 401" fill="none" xmlns="http://www.w3.org/2000/svg"><g clip-path="url(#c0)"><mask id="m0" style="mask-type:luminance" maskUnits="userSpaceOnUse" x="0" y="0" width="2208" height="401"><path d="M2208 0H0V401H2208V0Z" fill="white"/></mask><g mask="url(#m0)"><path d="M2206.19 3.91H2040.93V232.54H2207.85V209.07H2066.67V129.05H2191.44V105.59H2066.67V27.38H2206.19V3.91ZM1954.84 196.29L1937.83 179.59C1916.01 200.5 1895.39 212.53 1863.93 212.53C1813.66 212.53 1775.43 171.02 1775.43 117.77C1775.43 64.53 1813.36 23.77 1863.93 23.77C1894.94 23.77 1916.46 36.85 1935.88 55.05L1953.49 36.1C1930.61 14.59 1905.77-.15 1864.23-.15C1796.95-.15 1748.64 53.1 1748.64 118.38C1748.64 183.65 1797.25 236.3 1863.33 236.3C1904.87 236.3 1930.91 220.35 1954.84 196.14M1633.35 232.54H1659.24V3.91H1633.35V232.54ZM1520.31 118.53C1520.31 169.52 1483.44 208.62 1425.64 208.62H1372.06V27.83H1425.64C1483.44 27.83 1520.31 67.69 1520.31 118.68M1547.11 117.92C1547.11 53.25 1497.44 3.91 1425.49 3.91H1346.02V232.54H1425.49C1497.44 232.54 1547.11 182.6 1547.11 117.92ZM1246.84 3.91H1081.57V232.54H1248.49V209.07H1107.31V129.05H1232.09V105.59H1107.31V27.38H1246.84V3.91ZM946.87 47.38V232.54H972.75V3.91H946.57L863.18 128.6L779.95 3.91H753.76V232.54H778.9V47.68L862.28 169.82H863.63L947.02 47.38H946.87Z" fill="black"/><path d="M753.76 327.45V335.12H778.44V401H786.87V335.12H811.56V327.45H753.76ZM899.91 327.45V360.09H857.46V327.45H849.18V401H857.46V367.91H899.91V401H908.19V327.45H899.91ZM952.74 327.45V401H1006.47V393.48H961.01V367.76H1001.2V360.24H961.01V335.12H1005.87V327.6H952.74V327.45ZM1152.62 327.45V360.09H1110.17V327.45H1101.89V401H1110.17V367.91H1152.62V401H1160.89V327.45H1152.62ZM1205.44 327.45V401H1259.18V393.48H1213.72V367.76H1253.91V360.24H1213.72V335.12H1258.58V327.6H1205.44V327.45ZM1397.65 327.45V401H1447.32V393.33H1405.93V327.45H1397.65ZM1468.99 327.45V335.12H1493.67V401H1502.1V335.12H1526.79V327.45H1468.99ZM1615.14 327.45V360.09H1572.69V327.45H1564.41V401H1572.69V367.91H1615.14V401H1623.41V327.45H1615.14ZM1723.05 327.45V401H1731.33V368.96H1771.22V361.44H1731.33V335.12H1775.88V327.45H1723.05ZM1966.43 327.45L1939.64 367.61L1912.85 327.45H1904.42V401H1912.55V341.59L1939.34 380.85H1939.79L1966.58 341.44V401H1974.86V327.45H1966.43ZM2020.01 401H2028.29V327.45H2020.01V401ZM2073.59 327.45V401H2123.26V393.33H2081.87V327.45H2073.59ZM2198.22 327.45L2173.23 364.15L2148.4 327.45H2138.31L2168.87 371.82V400.85H2177.3V371.67L2207.85 327.3H2198.22V327.45ZM1326.76 336.62L1343.46 374.08H1309.9L1326.76 336.62ZM1322.99 327L1289.43 401H1298.01L1306.74 381.6H1346.77L1355.35 401H1364.23L1330.67 327H1322.84H1322.99ZM1834.58 336.62L1851.29 374.08H1817.72L1834.58 336.62ZM1830.82 327L1797.25 401H1805.83L1814.56 381.6H1854.6L1863.18 401H1872.06L1838.49 327H1830.67H1830.82Z" fill="black"/><path d="M297.26 30.08C268.21 13.39 234.65 3.76 198.83 3.76C88.95 3.91 0 92.81 0 202.46C0 312.11 88.95 401 198.68 401V200.05C198.68 127.4 238.41 63.93 297.11 30.08" fill="#F39323"/><path d="M198.68 200.05V401C308.4 401 397.35 312.11 397.35 202.46C397.35 128.6 357.01 64.38 297.11 30.23C238.26 64.08 198.68 127.4 198.68 200.2" fill="#007E94"/><path d="M586.84 204.86V3.91H394.94C359.27 3.91 326.01 13.54 297.11 30.23C356.86 64.38 397.2 128.6 397.2 202.46C397.2 312.11 308.25 401.15 198.68 401.15H390.58C498.95 401.15 586.84 313.31 586.84 205.01" fill="#21A0B3"/></g></g><defs><clipPath id="c0"><rect width="2208" height="401" fill="white"/></clipPath></defs></svg>';
 
 function Logo({ size }) {
@@ -478,17 +489,35 @@ function TbdNameInput({ participantKey, currentName, onAssign, participants, tbd
   );
 }
 
-function ApoNameInput({ onAssign, initialData }) {
+function ApoNameInput({ onAssign, initialData, apoAssignments, participantKey }) {
   const [vorname, setVorname] = useState(initialData ? initialData.name.split(" ")[0] : "");
   const [nachname, setNachname] = useState(initialData ? initialData.name.split(" ").slice(1).join(" ") : "");
   const [apotheke, setApotheke] = useState(initialData ? initialData.apotheke : "");
   const [saved, setSaved] = useState(!!initialData);
+  const [showSuggestions, setShowSuggestions] = useState(!initialData);
+
+  // Filter out already-assigned suggestions
+  const assignedNames = Object.entries(apoAssignments || {})
+    .filter(([key]) => key !== participantKey)
+    .map(([, data]) => data.name.toLowerCase());
+  const availableSuggestions = APO_SUGGESTIONS.filter(s => {
+    const full = (s.vorname + " " + s.nachname).trim().toLowerCase();
+    return !assignedNames.includes(full);
+  });
+
+  const handleSuggestionClick = (s) => {
+    setVorname(s.vorname);
+    setNachname(s.nachname);
+    setApotheke(s.apotheke);
+    setShowSuggestions(false);
+  };
 
   const handleSave = () => {
     if (!vorname.trim()) return;
     const fullName = (vorname.trim() + " " + nachname.trim()).trim();
     onAssign({ name: fullName, apotheke: apotheke.trim(), ort: "", plz: "", partner: false, kooperation: "", adm: "" });
     setSaved(true);
+    setShowSuggestions(false);
   };
 
   const handleEdit = () => {
@@ -498,6 +527,7 @@ function ApoNameInput({ onAssign, initialData }) {
   const handleClear = () => {
     setVorname(""); setNachname(""); setApotheke("");
     setSaved(false);
+    setShowSuggestions(true);
     onAssign(null);
   };
 
@@ -531,6 +561,26 @@ function ApoNameInput({ onAssign, initialData }) {
       <div style={{ fontFamily: "Trebuchet MS, sans-serif", fontSize: 13, fontWeight: 700, color: ORANGE, marginBottom: 10 }}>
         Person eintragen
       </div>
+      {showSuggestions && availableSuggestions.length > 0 && (
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ fontFamily: "Trebuchet MS, sans-serif", fontSize: 11, color: "#9CA3AF", marginBottom: 6 }}>
+            Vorschl{"\u00E4"}ge aus Transkript:
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+            {availableSuggestions.map((s, i) => (
+              <button key={i} onClick={() => handleSuggestionClick(s)} title={s.info} style={{
+                padding: "5px 10px", borderRadius: 16, border: "1.5px solid " + PETROL + "40",
+                background: PETROL + "08", color: PETROL,
+                fontFamily: "Trebuchet MS, sans-serif", fontSize: 12, fontWeight: 600,
+                cursor: "pointer", transition: "all 0.15s"
+              }}
+              onMouseOver={e => { e.target.style.background = PETROL + "18"; e.target.style.borderColor = PETROL; }}
+              onMouseOut={e => { e.target.style.background = PETROL + "08"; e.target.style.borderColor = PETROL + "40"; }}
+              >{s.vorname} {s.nachname}{s.nachname ? "" : "?"}</button>
+            ))}
+          </div>
+        </div>
+      )}
       <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
         <div style={{ flex: 1 }}>
           <div style={{ fontFamily: "Trebuchet MS, sans-serif", fontSize: 11, color: "#6B7280", marginBottom: 3 }}>Vorname</div>
@@ -1268,6 +1318,8 @@ function App() {
               {program === "apo" && (
                 <ApoNameInput
                   initialData={currentAssignments[p.key] || null}
+                  apoAssignments={apoAssignments}
+                  participantKey={p.key}
                   onAssign={(data) => {
                     if (data) {
                       setApoAssignments(prev => ({ ...prev, [p.key]: data }));
