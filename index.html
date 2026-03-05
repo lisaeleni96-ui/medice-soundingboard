@@ -778,7 +778,6 @@ function PasswordScreen({ onUnlock }) {
   const [pw, setPw] = useState("");
   const [email, setEmail] = useState("");
   const [error, setError] = useState("");
-  const [mode, setMode] = useState("shared"); // "shared" or "individual"
 
   const handleSubmit = () => {
     if (pw !== APP_PASSWORD) {
@@ -786,23 +785,16 @@ function PasswordScreen({ onUnlock }) {
       setPw("");
       return;
     }
-    if (mode === "individual" && !email.trim()) {
+    if (!email.trim()) {
       setError("Bitte E-Mail eingeben");
       return;
     }
-    if (mode === "individual" && !email.includes("@")) {
+    if (!email.includes("@")) {
       setError("Bitte g\u00fcltige E-Mail eingeben");
       return;
     }
-    onUnlock({ mode, email: mode === "individual" ? email.trim().toLowerCase() : null });
+    onUnlock({ mode: "individual", email: email.trim().toLowerCase() });
   };
-
-  const tabStyle = (active) => ({
-    flex: 1, padding: "10px 0", borderRadius: 8, border: "none",
-    background: active ? PETROL : "transparent", color: active ? "#fff" : "#6B7280",
-    fontFamily: "Trebuchet MS, sans-serif", fontSize: 13, fontWeight: 600,
-    cursor: "pointer", transition: "all 0.2s"
-  });
 
   return (
     <div style={{ width: "100vw", height: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: BG }}>
@@ -813,34 +805,25 @@ function PasswordScreen({ onUnlock }) {
 
         <div style={{ background: "#fff", borderRadius: 12, padding: "28px 32px", boxShadow: "0 2px 8px rgba(0,0,0,0.06)", border: "1px solid #E5E7EB", textAlign: "left" }}>
 
-          <div style={{ display: "flex", gap: 4, padding: 4, background: "#F3F4F6", borderRadius: 10, marginBottom: 20 }}>
-            <button onClick={() => { setMode("shared"); setError(""); }} style={tabStyle(mode === "shared")}>Gemeinsame Auswahl</button>
-            <button onClick={() => { setMode("individual"); setError(""); }} style={tabStyle(mode === "individual")}>Einzelne Auswahl</button>
-          </div>
-
           <div style={{ fontFamily: "Trebuchet MS, sans-serif", fontSize: 12, color: "#9CA3AF", marginBottom: 16, lineHeight: 1.5 }}>
-            {mode === "shared"
-              ? "Alle arbeiten am gleichen Ergebnis. \u00c4nderungen werden in Echtzeit synchronisiert."
-              : "Pers\u00f6nliche Bewertung, die deiner E-Mail zugeordnet wird. Du kannst jederzeit zur\u00fcckkehren."}
+            Pers{"\u00f6"}nliche Bewertung, die deiner E-Mail zugeordnet wird. Du kannst jederzeit zur{"\u00fc"}ckkehren.
           </div>
 
-          {mode === "individual" && (
-            <div style={{ marginBottom: 12 }}>
-              <label style={{ fontFamily: "Trebuchet MS, sans-serif", fontSize: 14, fontWeight: 600, color: BLACK, display: "block", marginBottom: 6 }}>
-                E-Mail
-              </label>
-              <input type="email" value={email} onChange={e => { setEmail(e.target.value); setError(""); }}
-                onKeyDown={e => { if (e.key === "Enter" && email) document.getElementById("pw-input").focus(); }}
-                placeholder="deine@email.de"
-                style={{
-                  width: "100%", padding: "12px 14px", borderRadius: 8, border: "1.5px solid #D1D5DB",
-                  fontFamily: "Trebuchet MS, sans-serif", fontSize: 14, outline: "none", boxSizing: "border-box"
-                }}
-                onFocus={e => e.target.style.borderColor = PETROL}
-                onBlur={e => e.target.style.borderColor = "#D1D5DB"}
-              />
-            </div>
-          )}
+          <div style={{ marginBottom: 12 }}>
+            <label style={{ fontFamily: "Trebuchet MS, sans-serif", fontSize: 14, fontWeight: 600, color: BLACK, display: "block", marginBottom: 6 }}>
+              E-Mail
+            </label>
+            <input type="email" value={email} onChange={e => { setEmail(e.target.value); setError(""); }}
+              onKeyDown={e => { if (e.key === "Enter" && email) document.getElementById("pw-input").focus(); }}
+              placeholder="deine@email.de"
+              style={{
+                width: "100%", padding: "12px 14px", borderRadius: 8, border: "1.5px solid #D1D5DB",
+                fontFamily: "Trebuchet MS, sans-serif", fontSize: 14, outline: "none", boxSizing: "border-box"
+              }}
+              onFocus={e => e.target.style.borderColor = PETROL}
+              onBlur={e => e.target.style.borderColor = "#D1D5DB"}
+            />
+          </div>
 
           <label style={{ fontFamily: "Trebuchet MS, sans-serif", fontSize: 14, fontWeight: 600, color: BLACK, display: "block", marginBottom: 6 }}>
             Passwort
@@ -1112,16 +1095,11 @@ function Summary({ participants, evaluations, tbdAssignments, participantInfo, p
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24, flexWrap: "wrap", gap: 10 }}>
         <div>
           <h2 style={{ fontFamily: "Trebuchet MS, sans-serif", fontSize: 20, fontWeight: 700, color: program === "apo" ? ORANGE : PETROL, margin: 0 }}>
-            Zusammenfassung {program === "apo" ? "Apo Think!" : "PTA Think!"}
+            {program === "apo" ? "Apo Think!" : "PTA Think!"} {"\u2013"} Deine Auswahl
           </h2>
-          {sessionMode === "individual" && userEmail && (
+          {userEmail && (
             <div style={{ fontFamily: "Trebuchet MS, sans-serif", fontSize: 12, color: "#6B7280", marginTop: 4 }}>
-              Einzelauswahl von: {userEmail}
-            </div>
-          )}
-          {sessionMode === "shared" && (
-            <div style={{ fontFamily: "Trebuchet MS, sans-serif", fontSize: 12, color: "#6B7280", marginTop: 4 }}>
-              Gemeinsame Auswahl
+              Bewertung von: {userEmail}
             </div>
           )}
         </div>
@@ -1160,6 +1138,286 @@ function Summary({ participants, evaluations, tbdAssignments, participantInfo, p
   );
 }
 
+// --- AUSWERTUNG: Shows both teams' evaluations side by side ---
+const TEAM_HOPF = { label: "Hopf Strategie", color: "#7C3AED", bg: "#F3E8FF" };
+const TEAM_MEDICE = { label: "Medice", color: "#0891B2", bg: "#E0F7FA" };
+// Placeholder emails - will be set by user
+var TEAM_HOPF_EMAIL = "eric.hopf@hopf-strategie.de";
+var TEAM_MEDICE_EMAIL = "l.gebert@medice.de";
+
+function Auswertung({ onBack, ptaParticipants, apoParticipants, apoAssignments, tbdAssignments }) {
+  const [hopfData, setHopfData] = useState(null);
+  const [mediceData, setMediceData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState("pta");
+  const [hopfEmail, setHopfEmail] = useState(TEAM_HOPF_EMAIL || "");
+  const [mediceEmail, setMediceEmail] = useState(TEAM_MEDICE_EMAIL || "");
+  const [emailsSet, setEmailsSet] = useState(!!TEAM_HOPF_EMAIL && !!TEAM_MEDICE_EMAIL);
+
+  const loadTeamData = async (hEmail, mEmail) => {
+    if (!supabase || !hEmail || !mEmail) return;
+    setLoading(true);
+    try {
+      const [hopfRes, mediceRes] = await Promise.all([
+        supabase.from("soundingboard").select("data").eq("id", "user_" + hEmail).single(),
+        supabase.from("soundingboard").select("data").eq("id", "user_" + mEmail).single()
+      ]);
+      setHopfData(hopfRes.data?.data || null);
+      setMediceData(mediceRes.data?.data || null);
+    } catch(e) { console.error("Auswertung load error:", e); }
+    setLoading(false);
+  };
+
+  useEffect(() => { if (emailsSet) loadTeamData(hopfEmail, mediceEmail); }, [emailsSet]);
+
+  const handleSetEmails = () => {
+    if (!hopfEmail.includes("@") || !mediceEmail.includes("@")) return;
+    TEAM_HOPF_EMAIL = hopfEmail.trim().toLowerCase();
+    TEAM_MEDICE_EMAIL = mediceEmail.trim().toLowerCase();
+    setHopfEmail(TEAM_HOPF_EMAIL);
+    setMediceEmail(TEAM_MEDICE_EMAIL);
+    setEmailsSet(true);
+  };
+
+  const decisionIcon = (d) => {
+    if (d === "einladen") return { icon: "\u2713", color: "#059669", bg: "#ECFDF5", label: "Einladen" };
+    if (d === "nicht_einladen") return { icon: "\u2717", color: "#DC2626", bg: "#FEF2F2", label: "Nicht einladen" };
+    return { icon: "\u25CB", color: "#9CA3AF", bg: "#F3F4F6", label: "Offen" };
+  };
+
+  const participants = activeTab === "pta" ? ptaParticipants : apoParticipants;
+  const hopfEvals = hopfData ? (activeTab === "pta" ? hopfData.evals : hopfData.apoEvals) || {} : {};
+  const mediceEvals = mediceData ? (activeTab === "pta" ? mediceData.evals : mediceData.apoEvals) || {} : {};
+  const assignments = activeTab === "pta" ? tbdAssignments : apoAssignments;
+
+  const tabStyle = (active) => ({
+    flex: 1, padding: "10px 0", borderRadius: 8, border: "none",
+    background: active ? PETROL : "transparent", color: active ? "#fff" : "#6B7280",
+    fontFamily: "Trebuchet MS, sans-serif", fontSize: 13, fontWeight: 600,
+    cursor: "pointer", transition: "all 0.2s"
+  });
+
+  return (
+    <div style={{ width: "100vw", height: "100vh", display: "flex", flexDirection: "column", background: BG }}>
+      {/* Header */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 20px", background: "#fff", borderBottom: "1px solid #E5E7EB", flexShrink: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+          <Logo />
+          <div style={{ width: 1, height: 24, background: "#E5E7EB" }} />
+          <span style={{ fontFamily: "Trebuchet MS, sans-serif", fontSize: 14, fontWeight: 700, color: PETROL }}>Sounding Board</span>
+          <span style={{ fontFamily: "Trebuchet MS, sans-serif", fontSize: 12, color: "#D97706", background: "#FEF3C7", padding: "2px 8px", borderRadius: 4, fontWeight: 600 }}>
+            AUSWERTUNG
+          </span>
+        </div>
+        <button onClick={onBack} style={{
+          padding: "7px 16px", borderRadius: 6, border: "1.5px solid " + PETROL,
+          background: "#fff", color: PETROL,
+          fontFamily: "Trebuchet MS, sans-serif", fontSize: 13, fontWeight: 600, cursor: "pointer"
+        }}>{"\u2190"} Zur{"\u00fc"}ck</button>
+      </div>
+
+      <div style={{ flex: 1, overflow: "auto", padding: 24 }}>
+        {/* Email setup */}
+        {!emailsSet && (
+          <div style={{ maxWidth: 480, margin: "40px auto", background: "#fff", borderRadius: 12, padding: 32, boxShadow: "0 2px 8px rgba(0,0,0,0.06)", border: "1px solid #E5E7EB" }}>
+            <h2 style={{ fontFamily: "Trebuchet MS, sans-serif", fontSize: 18, fontWeight: 700, color: PETROL, margin: "0 0 20px" }}>Auswertung konfigurieren</h2>
+            <div style={{ fontFamily: "Trebuchet MS, sans-serif", fontSize: 13, color: "#6B7280", marginBottom: 20, lineHeight: 1.5 }}>
+              Gib die E-Mail-Adressen beider Teams ein, um deren Bewertungen zu vergleichen.
+            </div>
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ fontFamily: "Trebuchet MS, sans-serif", fontSize: 13, fontWeight: 600, color: TEAM_HOPF.color, display: "block", marginBottom: 6 }}>
+                {TEAM_HOPF.label} E-Mail
+              </label>
+              <input type="email" value={hopfEmail} onChange={e => setHopfEmail(e.target.value)} placeholder="hopf@example.com"
+                style={{ width: "100%", padding: "10px 14px", borderRadius: 8, border: "1.5px solid #D1D5DB", fontFamily: "Trebuchet MS, sans-serif", fontSize: 14, outline: "none", boxSizing: "border-box" }} />
+            </div>
+            <div style={{ marginBottom: 20 }}>
+              <label style={{ fontFamily: "Trebuchet MS, sans-serif", fontSize: 13, fontWeight: 600, color: TEAM_MEDICE.color, display: "block", marginBottom: 6 }}>
+                {TEAM_MEDICE.label} E-Mail
+              </label>
+              <input type="email" value={mediceEmail} onChange={e => setMediceEmail(e.target.value)} placeholder="medice@example.com"
+                style={{ width: "100%", padding: "10px 14px", borderRadius: 8, border: "1.5px solid #D1D5DB", fontFamily: "Trebuchet MS, sans-serif", fontSize: 14, outline: "none", boxSizing: "border-box" }} />
+            </div>
+            <button onClick={handleSetEmails} style={{
+              width: "100%", padding: "12px 0", borderRadius: 8, border: "none",
+              background: PETROL, color: "#fff", fontFamily: "Trebuchet MS, sans-serif", fontSize: 15, fontWeight: 700, cursor: "pointer"
+            }}>Auswertung laden</button>
+          </div>
+        )}
+
+        {/* Results */}
+        {emailsSet && (
+          <div>
+            {/* Tab switcher PTA/APO */}
+            <div style={{ display: "flex", gap: 4, padding: 4, background: "#F3F4F6", borderRadius: 10, marginBottom: 24, maxWidth: 320 }}>
+              <button onClick={() => setActiveTab("pta")} style={tabStyle(activeTab === "pta")}>PTA Think!</button>
+              <button onClick={() => setActiveTab("apo")} style={tabStyle(activeTab === "apo")}>Apo Think!</button>
+            </div>
+
+            {/* Legend */}
+            <div style={{ display: "flex", gap: 16, marginBottom: 20, flexWrap: "wrap", alignItems: "center" }}>
+              <span style={{ fontFamily: "Trebuchet MS, sans-serif", fontSize: 12, color: TEAM_HOPF.color, background: TEAM_HOPF.bg, padding: "4px 12px", borderRadius: 6, fontWeight: 600 }}>
+                {TEAM_HOPF.label}: {hopfEmail}
+              </span>
+              <span style={{ fontFamily: "Trebuchet MS, sans-serif", fontSize: 12, color: TEAM_MEDICE.color, background: TEAM_MEDICE.bg, padding: "4px 12px", borderRadius: 6, fontWeight: 600 }}>
+                {TEAM_MEDICE.label}: {mediceEmail}
+              </span>
+              <button onClick={() => loadTeamData(hopfEmail, mediceEmail)} style={{
+                padding: "4px 12px", borderRadius: 6, border: "1px solid #D1D5DB", background: "#fff",
+                fontFamily: "Trebuchet MS, sans-serif", fontSize: 12, cursor: "pointer", color: "#6B7280"
+              }}>{"\u21BB"} Aktualisieren</button>
+              <button onClick={() => { setEmailsSet(false); }} style={{
+                padding: "4px 12px", borderRadius: 6, border: "1px solid #D1D5DB", background: "#fff",
+                fontFamily: "Trebuchet MS, sans-serif", fontSize: 12, cursor: "pointer", color: "#6B7280"
+              }}>E-Mails {"\u00e4"}ndern</button>
+            </div>
+
+            {loading ? (
+              <div style={{ fontFamily: "Trebuchet MS, sans-serif", fontSize: 14, color: "#9CA3AF", padding: 40, textAlign: "center" }}>Laden...</div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+                {/* Summary bar */}
+                {(function() {
+                  var hInvite = 0, hReject = 0, hOpen = 0, mInvite = 0, mReject = 0, mOpen = 0, agree = 0, disagree = 0;
+                  participants.forEach(function(p) {
+                    var h = (hopfEvals[p.key] || {}).entscheidung;
+                    var m = (mediceEvals[p.key] || {}).entscheidung;
+                    if (h === "einladen") hInvite++; else if (h === "nicht_einladen") hReject++; else hOpen++;
+                    if (m === "einladen") mInvite++; else if (m === "nicht_einladen") mReject++; else mOpen++;
+                    if (h && m && h === m) agree++; else if (h && m) disagree++;
+                  });
+                  return (
+                    <div style={{ display: "flex", gap: 16, flexWrap: "wrap", padding: "10px 16px", background: "#fff", borderRadius: "10px 10px 0 0", border: "1px solid #E5E7EB", borderBottom: "none" }}>
+                      <span style={{ fontFamily: "Trebuchet MS, sans-serif", fontSize: 12, fontWeight: 700, color: "#374151" }}>{participants.length} Teilnehmer</span>
+                      <span style={{ fontFamily: "Trebuchet MS, sans-serif", fontSize: 11, color: TEAM_HOPF.color }}>{TEAM_HOPF.label}: {hInvite} Ja / {hReject} Nein / {hOpen} Offen</span>
+                      <span style={{ fontFamily: "Trebuchet MS, sans-serif", fontSize: 11, color: TEAM_MEDICE.color }}>{TEAM_MEDICE.label}: {mInvite} Ja / {mReject} Nein / {mOpen} Offen</span>
+                      <span style={{ fontFamily: "Trebuchet MS, sans-serif", fontSize: 11, color: "#059669" }}>{agree} Einig</span>
+                      <span style={{ fontFamily: "Trebuchet MS, sans-serif", fontSize: 11, color: "#D97706" }}>{disagree} Uneinig</span>
+                    </div>
+                  );
+                })()}
+
+                {/* Table header */}
+                <div style={{ display: "grid", gridTemplateColumns: "240px 1fr 1fr 100px", gap: 0, background: "#F3F4F6", border: "1px solid #E5E7EB", borderBottom: "none" }}>
+                  <div style={{ padding: "6px 12px", fontFamily: "Trebuchet MS, sans-serif", fontSize: 11, fontWeight: 700, color: "#6B7280" }}>Teilnehmer</div>
+                  <div style={{ padding: "6px 12px", fontFamily: "Trebuchet MS, sans-serif", fontSize: 11, fontWeight: 700, color: TEAM_HOPF.color, borderLeft: "1px solid #E5E7EB" }}>{TEAM_HOPF.label}</div>
+                  <div style={{ padding: "6px 12px", fontFamily: "Trebuchet MS, sans-serif", fontSize: 11, fontWeight: 700, color: TEAM_MEDICE.color, borderLeft: "1px solid #E5E7EB" }}>{TEAM_MEDICE.label}</div>
+                  <div style={{ padding: "6px 8px", fontFamily: "Trebuchet MS, sans-serif", fontSize: 11, fontWeight: 700, color: "#374151", textAlign: "center", borderLeft: "1px solid #E5E7EB" }}>Finale</div>
+                </div>
+
+                {/* Rows */}
+                {participants.map((p, i) => {
+                  const name = assignments[p.key] ? assignments[p.key].name : p.name;
+                  const assign = assignments[p.key] || {};
+                  const hEval = hopfEvals[p.key] || {};
+                  const mEval = mediceEvals[p.key] || {};
+                  const hDec = decisionIcon(hEval.entscheidung);
+                  const mDec = decisionIcon(mEval.entscheidung);
+                  var finale;
+                  if (hEval.entscheidung && hEval.entscheidung === mEval.entscheidung) {
+                    finale = decisionIcon(hEval.entscheidung);
+                  } else if (hEval.entscheidung && mEval.entscheidung && hEval.entscheidung !== mEval.entscheidung) {
+                    finale = { icon: "!", color: "#D97706", bg: "#FEF3C7", label: "Uneinig" };
+                  } else {
+                    finale = decisionIcon(null);
+                  }
+
+                  var photo = null;
+                  if (activeTab === "apo") { photo = getApoPhoto(p.key, apoAssignments); }
+                  else { photo = PHOTOS[p.key] || null; }
+
+                  var pInfo = activeTab === "pta" ? (PARTICIPANT_INFO[p.key] || {}) : {};
+                  if (activeTab === "apo" && assign.name) pInfo = assign;
+
+                  var criteria = activeTab === "pta" ? PTA_CRITERIA : APO_CRITERIA;
+                  var detailCriteria = criteria.filter(function(c) { return c.id !== "entscheidung"; });
+
+                  // Build compact eval summary
+                  var buildEvalLine = function(ev) {
+                    var parts = [];
+                    detailCriteria.forEach(function(c) {
+                      var v = ev[c.id];
+                      if (!v && v !== false) return;
+                      var short = c.label.replace("Ist uns aufgefallen?", "Aufgefallen").replace("Wenn aufgefallen?", "Wie").replace("Begr\u00fcndung", "Begr.").replace("Teilnahme am Perenterol Expertenzirkel?", "Expertenzirkel").replace("Teil einer Partnerprogrammapotheke?", "Partnerprogr.").replace("Teil des Partnerprogramms?", "Partnerprogr.").replace("Teil PTA Family?", "PTA Family").replace("Zust\u00e4ndig f\u00fcr Einkauf?", "Einkauf").replace("Besondere Rolle in der Apotheke?", "Rolle");
+                      var val = v === true || v === "Ja" ? "Ja" : v === false || v === "Nein" ? "Nein" : v;
+                      parts.push({ label: short, val: val });
+                    });
+                    return parts;
+                  };
+
+                  var hParts = buildEvalLine(hEval);
+                  var mParts = buildEvalLine(mEval);
+
+                  return (
+                    <div key={p.key} style={{ display: "grid", gridTemplateColumns: "240px 1fr 1fr 100px", gap: 0, background: i % 2 === 0 ? "#fff" : "#FAFBFC", border: "1px solid #E5E7EB", borderTop: "none" }}>
+                      {/* Name col */}
+                      <div style={{ padding: "8px 12px", display: "flex", alignItems: "center", gap: 8 }}>
+                        <div style={{ width: 36, height: 36, borderRadius: "50%", overflow: "hidden", flexShrink: 0, background: "#F3F4F6", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                          {photo ? <img src={photo} style={{ width: 36, height: 36, objectFit: "cover" }} /> : <span style={{ fontSize: 14, color: "#D1D5DB" }}>{"\uD83D\uDC64"}</span>}
+                        </div>
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontFamily: "Trebuchet MS, sans-serif", fontSize: 13, fontWeight: 600, color: BLACK, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{name}</div>
+                          <div style={{ fontFamily: "Trebuchet MS, sans-serif", fontSize: 10, color: "#9CA3AF", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                            {[pInfo.apotheke, pInfo.ort].filter(Boolean).join(", ")}
+                          </div>
+                        </div>
+                      </div>
+                      {/* Hopf col */}
+                      <div style={{ padding: "6px 10px", borderLeft: "1px solid #E5E7EB" }}>
+                        <div style={{ marginBottom: 3 }}>
+                          <span style={{ display: "inline-block", padding: "1px 8px", borderRadius: 4, background: hDec.bg, color: hDec.color, fontFamily: "Trebuchet MS, sans-serif", fontSize: 10, fontWeight: 600 }}>{hDec.icon} {hDec.label}</span>
+                        </div>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: "2px 6px" }}>
+                          {hParts.map(function(pt) {
+                            var isPos = pt.val === "Ja" || pt.val === "Positiv";
+                            var isNeg = pt.val === "Nein" || pt.val === "Weniger positiv";
+                            var isText = !isPos && !isNeg;
+                            return (
+                              <span key={pt.label} style={{ fontFamily: "Trebuchet MS, sans-serif", fontSize: 9, color: isPos ? "#059669" : isNeg ? "#DC2626" : "#6B7280", whiteSpace: "nowrap" }}>
+                                <span style={{ color: "#B0B0B0" }}>{pt.label}:</span> {isText ? <span title={pt.val} style={{ maxWidth: 80, display: "inline-block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", verticalAlign: "bottom" }}>{pt.val}</span> : pt.val}
+                              </span>
+                            );
+                          })}
+                          {hParts.length === 0 && <span style={{ fontFamily: "Trebuchet MS, sans-serif", fontSize: 9, color: "#D1D5DB" }}>{"\u2013"} keine Bewertung</span>}
+                        </div>
+                      </div>
+                      {/* Medice col */}
+                      <div style={{ padding: "6px 10px", borderLeft: "1px solid #E5E7EB" }}>
+                        <div style={{ marginBottom: 3 }}>
+                          <span style={{ display: "inline-block", padding: "1px 8px", borderRadius: 4, background: mDec.bg, color: mDec.color, fontFamily: "Trebuchet MS, sans-serif", fontSize: 10, fontWeight: 600 }}>{mDec.icon} {mDec.label}</span>
+                        </div>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: "2px 6px" }}>
+                          {mParts.map(function(pt) {
+                            var isPos = pt.val === "Ja" || pt.val === "Positiv";
+                            var isNeg = pt.val === "Nein" || pt.val === "Weniger positiv";
+                            var isText = !isPos && !isNeg;
+                            return (
+                              <span key={pt.label} style={{ fontFamily: "Trebuchet MS, sans-serif", fontSize: 9, color: isPos ? "#059669" : isNeg ? "#DC2626" : "#6B7280", whiteSpace: "nowrap" }}>
+                                <span style={{ color: "#B0B0B0" }}>{pt.label}:</span> {isText ? <span title={pt.val} style={{ maxWidth: 80, display: "inline-block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", verticalAlign: "bottom" }}>{pt.val}</span> : pt.val}
+                              </span>
+                            );
+                          })}
+                          {mParts.length === 0 && <span style={{ fontFamily: "Trebuchet MS, sans-serif", fontSize: 9, color: "#D1D5DB" }}>{"\u2013"} keine Bewertung</span>}
+                        </div>
+                      </div>
+                      {/* Finale col */}
+                      <div style={{ padding: "8px 6px", borderLeft: "1px solid #E5E7EB", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        <span style={{ display: "inline-block", padding: "3px 8px", borderRadius: 6, background: finale.bg, color: finale.color, fontFamily: "Trebuchet MS, sans-serif", fontSize: 11, fontWeight: 700, textAlign: "center" }}>
+                          {finale.icon} {finale.label}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function App() {
   // --- Supabase Sync ---
   const [idx, setIdx] = useState(0);
@@ -1177,14 +1435,14 @@ function App() {
   });
   const [apoAssignments, setApoAssignments] = useState({});
   const [syncStatus, setSyncStatus] = useState("loading");
-  const [sessionMode, setSessionMode] = useState(null); // "shared" or "individual"
+  const [sessionMode, setSessionMode] = useState(null); // always "individual"
   const [userEmail, setUserEmail] = useState(null);
   const skipNextSync = useRef(false);
   const saveTimer = useRef(null);
   const channelRef = useRef(null);
   const lastSaveTime = useRef(0);
 
-  const supabaseId = sessionMode === "individual" ? "user_" + userEmail : "main";
+  const supabaseId = userEmail ? "user_" + userEmail : "main";
 
   // Load from Supabase after login
   // --- LOAD: Always load assignments from "main", evals from own row ---
@@ -1204,23 +1462,14 @@ function App() {
           if (mainData.data.ptaParticipants && mainData.data.ptaParticipants.length > 0) setPtaParticipants(mainData.data.ptaParticipants);
         }
 
-        // 2) Load evals from own row (shared="main", individual="user_<email>")
-        if (sessionMode === "individual") {
-          console.log("Loading individual evals from '" + supabaseId + "'...");
-          const { data, error } = await supabase.from("soundingboard").select("data").eq("id", supabaseId).single();
-          if (error && error.code !== "PGRST116") { console.error("Individual load error:", error); }
-          if (data?.data) {
-            if (data.data.evals) setEvals(data.data.evals);
-            if (data.data.apoEvals) setApoEvals(data.data.apoEvals);
-            if (data.data.program) setProgram(data.data.program);
-          }
-        } else {
-          // Shared mode: evals also come from "main"
-          if (mainData?.data) {
-            if (mainData.data.evals) setEvals(mainData.data.evals);
-            if (mainData.data.apoEvals) setApoEvals(mainData.data.apoEvals);
-            if (mainData.data.program) setProgram(mainData.data.program);
-          }
+        // 2) Load evals from own row
+        console.log("Loading evals from '" + supabaseId + "'...");
+        const { data, error } = await supabase.from("soundingboard").select("data").eq("id", supabaseId).single();
+        if (error && error.code !== "PGRST116") { console.error("Eval load error:", error); }
+        if (data?.data) {
+          if (data.data.evals) setEvals(data.data.evals);
+          if (data.data.apoEvals) setApoEvals(data.data.apoEvals);
+          if (data.data.program) setProgram(data.data.program);
         }
         skipNextSync.current = true;
         setSyncStatus("synced");
@@ -1243,18 +1492,13 @@ function App() {
           if (d.apoAssignments) setApoAssignments(d.apoAssignments);
           if (d.apoParticipants && d.apoParticipants.length > 0) setApoParticipants(d.apoParticipants);
           if (d.ptaParticipants && d.ptaParticipants.length > 0) setPtaParticipants(d.ptaParticipants);
-          if (sessionMode === "shared") {
-            skipNextSync.current = true;
-            if (d.evals) setEvals(d.evals);
-            if (d.apoEvals) setApoEvals(d.apoEvals);
-          }
           setSyncStatus("synced");
         })
         .subscribe();
       channels.push(mainChannel);
 
-      // In individual mode, also listen to own row for eval sync across devices
-      if (sessionMode === "individual") {
+      // Also listen to own row for eval sync across devices
+      {
         const userChannel = supabase.channel("sb_" + supabaseId)
           .on("postgres_changes", { event: "UPDATE", schema: "public", table: "soundingboard", filter: "id=eq." + supabaseId }, (payload) => {
             const d = payload.new?.data;
@@ -1292,28 +1536,18 @@ function App() {
         mainSave.apoAssignments = apoAssignments;
         mainSave.apoParticipants = apoParticipants;
         mainSave.ptaParticipants = ptaParticipants;
-        // In shared mode, also save evals to main
-        if (sessionMode === "shared") {
-          mainSave.evals = evals;
-          mainSave.apoEvals = apoEvals;
-          mainSave.program = program;
-        }
         const { error: mainErr } = await supabase.from("soundingboard").upsert({
           id: "main", data: mainSave, updated_at: new Date().toISOString()
         });
         console.log("Save main:", mainErr ? "ERROR: " + mainErr.message : "OK");
 
-        // 2) In individual mode, save evals to own row
-        if (sessionMode === "individual") {
-          const userSave = { evals, apoEvals, program, userEmail };
-          const { error: userErr } = await supabase.from("soundingboard").upsert({
-            id: supabaseId, data: userSave, updated_at: new Date().toISOString()
-          });
-          console.log("Save user (" + supabaseId + "):", userErr ? "ERROR: " + userErr.message : "OK");
-          setSyncStatus(mainErr || userErr ? "error" : "synced");
-        } else {
-          setSyncStatus(mainErr ? "error" : "synced");
-        }
+        // 2) Save evals to own row
+        const userSave = { evals, apoEvals, program, userEmail };
+        const { error: userErr } = await supabase.from("soundingboard").upsert({
+          id: supabaseId, data: userSave, updated_at: new Date().toISOString()
+        });
+        console.log("Save user (" + supabaseId + "):", userErr ? "ERROR: " + userErr.message : "OK");
+        setSyncStatus(mainErr || userErr ? "error" : "synced");
       } catch(e) { console.error("Save catch:", e); setSyncStatus("error"); }
     }, 500);
   }, [evals, apoEvals, program, tbdAssignments, apoAssignments, apoParticipants, ptaParticipants]);
@@ -1398,6 +1632,15 @@ function App() {
   if (view === "select_program") {
     return <ProgramSelector onSelect={(prog) => { setProgram(prog); setIdx(0); setView("eval"); }} />;
   }
+  if (view === "auswertung") {
+    return <Auswertung
+      onBack={() => setView("eval")}
+      ptaParticipants={ptaParticipants}
+      apoParticipants={apoParticipants}
+      apoAssignments={apoAssignments}
+      tbdAssignments={tbdAssignments}
+    />;
+  }
 
   // Determine if current participant is a TBD/assignable slot
   const isTbd = program === "pta" ? (p.key === "tbd1" || p.key === "tbd2") : true;
@@ -1445,14 +1688,9 @@ function App() {
             }}>{"\uD83D\uDCCB"} Teilnehmerliste</button>
           )}
           <ProgressBar total={currentParticipants.length} completed={done} />
-          {sessionMode === "individual" && (
+          {userEmail && (
             <span style={{ fontFamily: "Trebuchet MS, sans-serif", fontSize: 10, color: "#7C3AED", background: "#F3E8FF", padding: "2px 8px", borderRadius: 4, fontWeight: 600 }} title={userEmail}>
               {userEmail}
-            </span>
-          )}
-          {sessionMode === "shared" && (
-            <span style={{ fontFamily: "Trebuchet MS, sans-serif", fontSize: 10, color: "#059669", background: "#ECFDF5", padding: "2px 8px", borderRadius: 4, fontWeight: 600 }}>
-              Gemeinsam
             </span>
           )}
           <div style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, color: syncStatus === "error" ? "#EF4444" : "#9CA3AF" }} title={syncStatus === "synced" ? "Gespeichert" : syncStatus === "saving" ? "Speichert..." : syncStatus === "error" ? "Sync-Fehler" : "Laden..."}>
@@ -1464,7 +1702,12 @@ function App() {
             background: view === "summary" ? PETROL : "#fff",
             color: view === "summary" ? "#fff" : PETROL,
             fontFamily: "Trebuchet MS, sans-serif", fontSize: 13, fontWeight: 600, cursor: "pointer"
-          }}>{view === "summary" ? "\u2190 Zur\u00fcck" : "Zusammenfassung"}</button>
+          }}>{view === "summary" ? "\u2190 Zur\u00fcck" : "\u2713 Fertig"}</button>
+          <button onClick={() => setView("auswertung")} style={{
+            padding: "7px 16px", borderRadius: 6, border: "1.5px solid #D97706",
+            background: "#FEF3C7", color: "#D97706",
+            fontFamily: "Trebuchet MS, sans-serif", fontSize: 13, fontWeight: 600, cursor: "pointer"
+          }}>Auswertung</button>
         </div>
       </div>
 
@@ -1637,7 +1880,7 @@ function App() {
                   background: ORANGE, color: "#fff",
                   fontFamily: "Trebuchet MS, sans-serif", fontSize: 14, fontWeight: 600, cursor: "pointer",
                   display: "flex", alignItems: "center", justifyContent: "center", gap: 8
-                }}>Zusammenfassung {"\u2192"}</button>
+                }}>{"\u2713"} Fertig</button>
               </div>
             </div>
           </div>
