@@ -584,11 +584,18 @@ function ApoNameInput({ onAssign, initialData, apoAssignments, participantKey })
             </div>
             {apotheke && <div style={{ fontFamily: "Trebuchet MS, sans-serif", fontSize: 12, color: "#6B7280", marginTop: 2 }}>{apotheke}</div>}
           </div>
-          <button onClick={handleEdit} style={{
-            padding: "4px 12px", borderRadius: 4, border: "1px solid #D1D5DB",
-            background: "#fff", color: "#6B7280", fontFamily: "Trebuchet MS, sans-serif",
-            fontSize: 11, cursor: "pointer"
-          }}>{"\u270E"} Bearbeiten</button>
+          <div style={{ display: "flex", gap: 6 }}>
+            <button onClick={handleEdit} style={{
+              padding: "4px 12px", borderRadius: 4, border: "1px solid #D1D5DB",
+              background: "#fff", color: "#6B7280", fontFamily: "Trebuchet MS, sans-serif",
+              fontSize: 11, cursor: "pointer"
+            }}>{"\u270E"} Bearbeiten</button>
+            <button onClick={handleClear} style={{
+              padding: "4px 12px", borderRadius: 4, border: "1px solid #EF444440",
+              background: "#fff", color: "#EF4444", fontFamily: "Trebuchet MS, sans-serif",
+              fontSize: 11, cursor: "pointer"
+            }}>{"\u2717"} Zur{"\u00fc"}cksetzen</button>
+          </div>
         </div>
       </div>
     );
@@ -1156,6 +1163,7 @@ function App() {
   const skipNextSync = useRef(false);
   const saveTimer = useRef(null);
   const channelRef = useRef(null);
+  const lastSaveTime = useRef(0);
 
   const supabaseId = sessionMode === "individual" ? "user_" + userEmail : "main";
 
@@ -1208,14 +1216,14 @@ function App() {
         .on("postgres_changes", { event: "UPDATE", schema: "public", table: "soundingboard", filter: "id=eq.main" }, (payload) => {
           const d = payload.new?.data;
           if (!d) return;
+          // Ignore echoes from own save (within 2s)
+          if (Date.now() - lastSaveTime.current < 2000) return;
           if (d.tbdAssignments) setTbdAssignments(d.tbdAssignments);
           if (d.apoAssignments) setApoAssignments(d.apoAssignments);
-          // In shared mode, also pick up evals from main
           if (sessionMode === "shared") {
             skipNextSync.current = true;
             if (d.evals) setEvals(d.evals);
             if (d.apoEvals) setApoEvals(d.apoEvals);
-            if (d.program) setProgram(d.program);
           }
           setSyncStatus("synced");
         })
@@ -1228,10 +1236,10 @@ function App() {
           .on("postgres_changes", { event: "UPDATE", schema: "public", table: "soundingboard", filter: "id=eq." + supabaseId }, (payload) => {
             const d = payload.new?.data;
             if (!d) return;
+            if (Date.now() - lastSaveTime.current < 2000) return;
             skipNextSync.current = true;
             if (d.evals) setEvals(d.evals);
             if (d.apoEvals) setApoEvals(d.apoEvals);
-            if (d.program) setProgram(d.program);
             setSyncStatus("synced");
           })
           .subscribe();
@@ -1251,6 +1259,7 @@ function App() {
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(async () => {
       setSyncStatus("saving");
+      lastSaveTime.current = Date.now();
       try {
         // 1) Always save assignments to "main"
         // First load current main data to merge
