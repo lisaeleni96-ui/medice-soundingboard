@@ -711,16 +711,33 @@ function GroupPhotoOverlay({ src, onClose }) {
 
 function PasswordScreen({ onUnlock }) {
   const [pw, setPw] = useState("");
+  const [email, setEmail] = useState("");
   const [error, setError] = useState("");
+  const [mode, setMode] = useState("shared"); // "shared" or "individual"
 
   const handleSubmit = () => {
-    if (pw === APP_PASSWORD) {
-      onUnlock();
-    } else {
+    if (pw !== APP_PASSWORD) {
       setError("Falsches Passwort");
       setPw("");
+      return;
     }
+    if (mode === "individual" && !email.trim()) {
+      setError("Bitte E-Mail eingeben");
+      return;
+    }
+    if (mode === "individual" && !email.includes("@")) {
+      setError("Bitte g\u00fcltige E-Mail eingeben");
+      return;
+    }
+    onUnlock({ mode, email: mode === "individual" ? email.trim().toLowerCase() : null });
   };
+
+  const tabStyle = (active) => ({
+    flex: 1, padding: "10px 0", borderRadius: 8, border: "none",
+    background: active ? PETROL : "transparent", color: active ? "#fff" : "#6B7280",
+    fontFamily: "Trebuchet MS, sans-serif", fontSize: 13, fontWeight: 600,
+    cursor: "pointer", transition: "all 0.2s"
+  });
 
   return (
     <div style={{ width: "100vw", height: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: BG }}>
@@ -730,10 +747,40 @@ function PasswordScreen({ onUnlock }) {
         <div style={{ fontFamily: "Trebuchet MS, sans-serif", fontSize: 13, color: "#9CA3AF", marginBottom: 32 }}>Gesch{"\u00fc"}tzter Bereich</div>
 
         <div style={{ background: "#fff", borderRadius: 12, padding: "28px 32px", boxShadow: "0 2px 8px rgba(0,0,0,0.06)", border: "1px solid #E5E7EB", textAlign: "left" }}>
-          <label style={{ fontFamily: "Trebuchet MS, sans-serif", fontSize: 14, fontWeight: 600, color: BLACK, display: "block", marginBottom: 10 }}>
-            Passwort eingeben
+
+          <div style={{ display: "flex", gap: 4, padding: 4, background: "#F3F4F6", borderRadius: 10, marginBottom: 20 }}>
+            <button onClick={() => { setMode("shared"); setError(""); }} style={tabStyle(mode === "shared")}>Gemeinsame Auswahl</button>
+            <button onClick={() => { setMode("individual"); setError(""); }} style={tabStyle(mode === "individual")}>Einzelne Auswahl</button>
+          </div>
+
+          <div style={{ fontFamily: "Trebuchet MS, sans-serif", fontSize: 12, color: "#9CA3AF", marginBottom: 16, lineHeight: 1.5 }}>
+            {mode === "shared"
+              ? "Alle arbeiten am gleichen Ergebnis. \u00c4nderungen werden in Echtzeit synchronisiert."
+              : "Pers\u00f6nliche Bewertung, die deiner E-Mail zugeordnet wird. Du kannst jederzeit zur\u00fcckkehren."}
+          </div>
+
+          {mode === "individual" && (
+            <div style={{ marginBottom: 12 }}>
+              <label style={{ fontFamily: "Trebuchet MS, sans-serif", fontSize: 14, fontWeight: 600, color: BLACK, display: "block", marginBottom: 6 }}>
+                E-Mail
+              </label>
+              <input type="email" value={email} onChange={e => { setEmail(e.target.value); setError(""); }}
+                onKeyDown={e => { if (e.key === "Enter" && email) document.getElementById("pw-input").focus(); }}
+                placeholder="deine@email.de"
+                style={{
+                  width: "100%", padding: "12px 14px", borderRadius: 8, border: "1.5px solid #D1D5DB",
+                  fontFamily: "Trebuchet MS, sans-serif", fontSize: 14, outline: "none", boxSizing: "border-box"
+                }}
+                onFocus={e => e.target.style.borderColor = PETROL}
+                onBlur={e => e.target.style.borderColor = "#D1D5DB"}
+              />
+            </div>
+          )}
+
+          <label style={{ fontFamily: "Trebuchet MS, sans-serif", fontSize: 14, fontWeight: 600, color: BLACK, display: "block", marginBottom: 6 }}>
+            Passwort
           </label>
-          <input type="password" value={pw} onChange={e => { setPw(e.target.value); setError(""); }}
+          <input id="pw-input" type="password" value={pw} onChange={e => { setPw(e.target.value); setError(""); }}
             onKeyDown={e => { if (e.key === "Enter") handleSubmit(); }}
             placeholder="Passwort"
             style={{
@@ -855,7 +902,7 @@ function EmailScreen({ onSubmit }) {
   );
 }
 
-function Summary({ participants, evaluations, tbdAssignments, participantInfo, program, onSwitchToApo, allEvals, allParticipants }) {
+function Summary({ participants, evaluations, tbdAssignments, participantInfo, program, onSwitchToApo, allEvals, allParticipants, sessionMode, userEmail }) {
   const invite = participants.filter(p => evaluations[p.key]?.entscheidung === "einladen");
   const reject = participants.filter(p => evaluations[p.key]?.entscheidung === "nicht_einladen");
   const open = participants.filter(p => !evaluations[p.key]?.entscheidung);
@@ -893,7 +940,8 @@ function Summary({ participants, evaluations, tbdAssignments, participantInfo, p
 
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Sounding Board Auswahl");
-    XLSX.writeFile(wb, program === "apo" ? "Soundingboard_ApoThink.xlsx" : "Soundingboard_Auswahl.xlsx");
+    const emailSuffix = sessionMode === "individual" && userEmail ? "_" + userEmail.replace(/[@.]/g, "_") : "";
+    XLSX.writeFile(wb, (program === "apo" ? "Soundingboard_ApoThink" : "Soundingboard_Auswahl") + emailSuffix + ".xlsx");
   };
 
 
@@ -989,15 +1037,28 @@ function Summary({ participants, evaluations, tbdAssignments, participantInfo, p
       ];
     });
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([apoHeaders, ...apoRows]), "Apo Think");
-    XLSX.writeFile(wb, "Soundingboard_Gesamt.xlsx");
+    const emailSuffix = sessionMode === "individual" && userEmail ? "_" + userEmail.replace(/[@.]/g, "_") : "";
+    XLSX.writeFile(wb, "Soundingboard_Gesamt" + emailSuffix + ".xlsx");
   };
 
   return (
     <div style={{ padding: 32 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24, flexWrap: "wrap", gap: 10 }}>
-        <h2 style={{ fontFamily: "Trebuchet MS, sans-serif", fontSize: 20, fontWeight: 700, color: program === "apo" ? ORANGE : PETROL, margin: 0 }}>
-          Zusammenfassung {program === "apo" ? "Apo Think!" : "PTA Think!"}
-        </h2>
+        <div>
+          <h2 style={{ fontFamily: "Trebuchet MS, sans-serif", fontSize: 20, fontWeight: 700, color: program === "apo" ? ORANGE : PETROL, margin: 0 }}>
+            Zusammenfassung {program === "apo" ? "Apo Think!" : "PTA Think!"}
+          </h2>
+          {sessionMode === "individual" && userEmail && (
+            <div style={{ fontFamily: "Trebuchet MS, sans-serif", fontSize: 12, color: "#6B7280", marginTop: 4 }}>
+              Einzelauswahl von: {userEmail}
+            </div>
+          )}
+          {sessionMode === "shared" && (
+            <div style={{ fontFamily: "Trebuchet MS, sans-serif", fontSize: 12, color: "#6B7280", marginTop: 4 }}>
+              Gemeinsame Auswahl
+            </div>
+          )}
+        </div>
         <div style={{ display: "flex", gap: 8 }}>
           <button onClick={downloadExcel} style={{ padding: "8px 18px", borderRadius: 6, border: "none", background: ORANGE, color: "#fff", fontFamily: "Trebuchet MS, sans-serif", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
             Excel herunterladen
@@ -1047,68 +1108,135 @@ function App() {
   });
   const [apoAssignments, setApoAssignments] = useState({});
   const [syncStatus, setSyncStatus] = useState("loading");
+  const [sessionMode, setSessionMode] = useState(null); // "shared" or "individual"
+  const [userEmail, setUserEmail] = useState(null);
   const skipNextSync = useRef(false);
   const saveTimer = useRef(null);
+  const channelRef = useRef(null);
 
-  // Load from Supabase on mount
+  const supabaseId = sessionMode === "individual" ? "user_" + userEmail : "main";
+
+  // Load from Supabase after login
+  // --- LOAD: Always load assignments from "main", evals from own row ---
   useEffect(() => {
-    if (!supabase) { console.error("Supabase not initialized"); setSyncStatus("error"); return; }
+    if (!supabase || !sessionMode) return;
+    setSyncStatus("loading");
     const loadData = async () => {
       try {
-        console.log("Loading from Supabase...");
-        const { data, error } = await supabase.from("soundingboard").select("data").eq("id", "main").single();
-        console.log("Supabase response:", { data, error });
-        if (error) { console.error("Supabase load error:", error); setSyncStatus("error"); return; }
-        if (data?.data && Object.keys(data.data).length > 0) {
-          const d = data.data;
-          if (d.evals) setEvals(d.evals);
-          if (d.apoEvals) setApoEvals(d.apoEvals);
-          // Don't restore view — always start with password screen
-          if (d.program) setProgram(d.program);
-          if (d.tbdAssignments) setTbdAssignments(d.tbdAssignments);
-          if (d.apoAssignments) setApoAssignments(d.apoAssignments);
-          skipNextSync.current = true;
+        // 1) Always load shared assignments from "main"
+        console.log("Loading shared assignments from 'main'...");
+        const { data: mainData, error: mainErr } = await supabase.from("soundingboard").select("data").eq("id", "main").single();
+        if (mainErr && mainErr.code !== "PGRST116") console.error("Main load error:", mainErr);
+        if (mainData?.data) {
+          if (mainData.data.tbdAssignments) setTbdAssignments(mainData.data.tbdAssignments);
+          if (mainData.data.apoAssignments) setApoAssignments(mainData.data.apoAssignments);
         }
+
+        // 2) Load evals from own row (shared="main", individual="user_<email>")
+        if (sessionMode === "individual") {
+          console.log("Loading individual evals from '" + supabaseId + "'...");
+          const { data, error } = await supabase.from("soundingboard").select("data").eq("id", supabaseId).single();
+          if (error && error.code !== "PGRST116") { console.error("Individual load error:", error); }
+          if (data?.data) {
+            if (data.data.evals) setEvals(data.data.evals);
+            if (data.data.apoEvals) setApoEvals(data.data.apoEvals);
+            if (data.data.program) setProgram(data.data.program);
+          }
+        } else {
+          // Shared mode: evals also come from "main"
+          if (mainData?.data) {
+            if (mainData.data.evals) setEvals(mainData.data.evals);
+            if (mainData.data.apoEvals) setApoEvals(mainData.data.apoEvals);
+            if (mainData.data.program) setProgram(mainData.data.program);
+          }
+        }
+        skipNextSync.current = true;
         setSyncStatus("synced");
       } catch(e) { console.error("Supabase catch:", e); setSyncStatus("error"); }
     };
     loadData();
 
-    // Real-time: listen for changes from other devices
+    // --- REALTIME: Listen for assignment changes from "main" AND eval changes from own row ---
+    if (channelRef.current) { channelRef.current.forEach(ch => supabase.removeChannel(ch)); }
+    const channels = [];
     try {
-      const channel = supabase.channel("sb_changes")
+      // Always listen to "main" for assignment changes
+      const mainChannel = supabase.channel("sb_main_assignments")
         .on("postgres_changes", { event: "UPDATE", schema: "public", table: "soundingboard", filter: "id=eq.main" }, (payload) => {
           const d = payload.new?.data;
           if (!d) return;
-          skipNextSync.current = true;
-          if (d.evals) setEvals(d.evals);
-          if (d.apoEvals) setApoEvals(d.apoEvals);
-          // Don't sync view from other devices — each device controls its own navigation
-          if (d.program) setProgram(d.program);
           if (d.tbdAssignments) setTbdAssignments(d.tbdAssignments);
           if (d.apoAssignments) setApoAssignments(d.apoAssignments);
+          // In shared mode, also pick up evals from main
+          if (sessionMode === "shared") {
+            skipNextSync.current = true;
+            if (d.evals) setEvals(d.evals);
+            if (d.apoEvals) setApoEvals(d.apoEvals);
+            if (d.program) setProgram(d.program);
+          }
           setSyncStatus("synced");
         })
         .subscribe();
-      return () => { supabase.removeChannel(channel); };
-    } catch(e) { console.error("Realtime error:", e); }
-  }, []);
+      channels.push(mainChannel);
 
-  // Save to Supabase on every change (debounced 500ms)
+      // In individual mode, also listen to own row for eval sync across devices
+      if (sessionMode === "individual") {
+        const userChannel = supabase.channel("sb_" + supabaseId)
+          .on("postgres_changes", { event: "UPDATE", schema: "public", table: "soundingboard", filter: "id=eq." + supabaseId }, (payload) => {
+            const d = payload.new?.data;
+            if (!d) return;
+            skipNextSync.current = true;
+            if (d.evals) setEvals(d.evals);
+            if (d.apoEvals) setApoEvals(d.apoEvals);
+            if (d.program) setProgram(d.program);
+            setSyncStatus("synced");
+          })
+          .subscribe();
+        channels.push(userChannel);
+      }
+
+      channelRef.current = channels;
+      return () => { channels.forEach(ch => supabase.removeChannel(ch)); channelRef.current = null; };
+    } catch(e) { console.error("Realtime error:", e); }
+  }, [sessionMode, userEmail]);
+
+  // --- SAVE: Assignments always to "main", evals to own row ---
+  const skipAssignmentSync = useRef(false);
   useEffect(() => {
-    if (!supabase || syncStatus === "loading") return;
+    if (!supabase || !sessionMode || syncStatus === "loading") return;
     if (skipNextSync.current) { skipNextSync.current = false; return; }
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(async () => {
       setSyncStatus("saving");
       try {
-        const { error } = await supabase.from("soundingboard").upsert({
-          id: "main",
-          data: { evals, apoEvals, program, tbdAssignments, apoAssignments },
-          updated_at: new Date().toISOString()
+        // 1) Always save assignments to "main"
+        // First load current main data to merge
+        const { data: mainCurrent } = await supabase.from("soundingboard").select("data").eq("id", "main").single();
+        const mainSave = mainCurrent?.data ? { ...mainCurrent.data } : {};
+        mainSave.tbdAssignments = tbdAssignments;
+        mainSave.apoAssignments = apoAssignments;
+        // In shared mode, also save evals to main
+        if (sessionMode === "shared") {
+          mainSave.evals = evals;
+          mainSave.apoEvals = apoEvals;
+          mainSave.program = program;
+        }
+        const { error: mainErr } = await supabase.from("soundingboard").upsert({
+          id: "main", data: mainSave, updated_at: new Date().toISOString()
         });
-        console.log("Save result:", error ? "ERROR: " + error.message : "OK");
-        setSyncStatus(error ? "error" : "synced");
+        console.log("Save main:", mainErr ? "ERROR: " + mainErr.message : "OK");
+
+        // 2) In individual mode, save evals to own row
+        if (sessionMode === "individual") {
+          const userSave = { evals, apoEvals, program, userEmail };
+          const { error: userErr } = await supabase.from("soundingboard").upsert({
+            id: supabaseId, data: userSave, updated_at: new Date().toISOString()
+          });
+          console.log("Save user (" + supabaseId + "):", userErr ? "ERROR: " + userErr.message : "OK");
+          setSyncStatus(mainErr || userErr ? "error" : "synced");
+        } else {
+          setSyncStatus(mainErr ? "error" : "synced");
+        }
       } catch(e) { console.error("Save catch:", e); setSyncStatus("error"); }
     }, 500);
   }, [evals, apoEvals, program, tbdAssignments, apoAssignments]);
@@ -1180,11 +1308,12 @@ function App() {
     const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Sounding Board Auswahl");
-    XLSX.writeFile(wb, program === "apo" ? "Soundingboard_ApoThink.xlsx" : "Soundingboard_Auswahl.xlsx");
-  }, [currentEvals, program]);
+    const emailSuffix = sessionMode === "individual" && userEmail ? "_" + userEmail.replace(/[@.]/g, "_") : "";
+    XLSX.writeFile(wb, (program === "apo" ? "Soundingboard_ApoThink" : "Soundingboard_Auswahl") + emailSuffix + ".xlsx");
+  }, [currentEvals, program, sessionMode, userEmail]);
 
   if (view === "password") {
-    return <PasswordScreen onUnlock={() => { setProgram("pta"); setView("eval"); }} />;
+    return <PasswordScreen onUnlock={({ mode, email }) => { setSessionMode(mode); setUserEmail(email); setView("select_program"); }} />;
   }
   if (view === "select_program") {
     return <ProgramSelector onSelect={(prog) => { setProgram(prog); setIdx(0); setView("eval"); }} />;
@@ -1227,6 +1356,16 @@ function App() {
             }}>{"\uD83D\uDCF7"} Gruppenfoto</button>
           )}
           <ProgressBar total={currentParticipants.length} completed={done} />
+          {sessionMode === "individual" && (
+            <span style={{ fontFamily: "Trebuchet MS, sans-serif", fontSize: 10, color: "#7C3AED", background: "#F3E8FF", padding: "2px 8px", borderRadius: 4, fontWeight: 600 }} title={userEmail}>
+              {userEmail}
+            </span>
+          )}
+          {sessionMode === "shared" && (
+            <span style={{ fontFamily: "Trebuchet MS, sans-serif", fontSize: 10, color: "#059669", background: "#ECFDF5", padding: "2px 8px", borderRadius: 4, fontWeight: 600 }}>
+              Gemeinsam
+            </span>
+          )}
           <div style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, color: syncStatus === "error" ? "#EF4444" : "#9CA3AF" }} title={syncStatus === "synced" ? "Gespeichert" : syncStatus === "saving" ? "Speichert..." : syncStatus === "error" ? "Sync-Fehler" : "Laden..."}>
             <span style={{ width: 8, height: 8, borderRadius: "50%", background: syncStatus === "synced" ? "#10B981" : syncStatus === "saving" ? ORANGE : syncStatus === "error" ? "#EF4444" : "#9CA3AF" }}></span>
             {syncStatus === "synced" ? "Gespeichert" : syncStatus === "saving" ? "Speichert..." : syncStatus === "error" ? "Sync-Fehler" : "Laden..."}
@@ -1252,6 +1391,7 @@ function App() {
             onSwitchToApo={() => { setProgram("apo"); setIdx(0); setView("eval"); }}
             allEvals={{ pta: evals, apo: apoEvals }}
             allParticipants={{ pta: PARTICIPANTS, apo: APO_PARTICIPANTS_TEMPLATE, ptaAssignments: tbdAssignments, apoAssignments: apoAssignments }}
+            sessionMode={sessionMode} userEmail={userEmail}
           /></div>
         ) : (
           <div style={{ flex: 1, overflowY: "auto", display: "flex", justifyContent: "center" }}>
