@@ -593,24 +593,17 @@ function ApoNameInput({ onAssign, initialData, apoAssignments, participantKey })
     );
   }
 
+  const [showManual, setShowManual] = useState(false);
+
   return (
     <div style={{ marginBottom: 16, padding: "14px 16px", background: "#FFF8EE", borderRadius: 8, border: "1.5px dashed " + ORANGE }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-        <div style={{ fontFamily: "Trebuchet MS, sans-serif", fontSize: 13, fontWeight: 700, color: ORANGE }}>
-          Person eintragen
-        </div>
-        {availableSuggestions.length > 0 && (
-          <button onClick={() => setShowSuggestions(!showSuggestions)} style={{
-            padding: "3px 10px", borderRadius: 4, border: "1px solid " + PETROL + "40",
-            background: showSuggestions ? PETROL + "10" : "#fff", color: PETROL,
-            fontFamily: "Trebuchet MS, sans-serif", fontSize: 11, fontWeight: 600, cursor: "pointer"
-          }}>{showSuggestions ? "Vorschläge ausblenden" : "Teilnehmerliste anzeigen"}</button>
-        )}
+      <div style={{ fontFamily: "Trebuchet MS, sans-serif", fontSize: 13, fontWeight: 700, color: ORANGE, marginBottom: 10 }}>
+        Person zuordnen
       </div>
-      {showSuggestions && availableSuggestions.length > 0 && (
-        <div style={{ marginBottom: 12 }}>
+      {availableSuggestions.length > 0 && (
+        <div style={{ marginBottom: showManual ? 12 : 0 }}>
           <div style={{ fontFamily: "Trebuchet MS, sans-serif", fontSize: 11, color: "#9CA3AF", marginBottom: 6 }}>
-            Teilnehmer zuordnen:
+            Aus Teilnehmerliste w{"\u00e4"}hlen:
           </div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
             {availableSuggestions.map((s, i) => (
@@ -627,38 +620,51 @@ function ApoNameInput({ onAssign, initialData, apoAssignments, participantKey })
           </div>
         </div>
       )}
-      <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontFamily: "Trebuchet MS, sans-serif", fontSize: 11, color: "#6B7280", marginBottom: 3 }}>Vorname</div>
-          <input type="text" value={vorname} onChange={e => setVorname(e.target.value)} placeholder="Vorname"
-            style={inputStyle} onKeyDown={e => { if (e.key === "Enter") handleSave(); }} />
-        </div>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontFamily: "Trebuchet MS, sans-serif", fontSize: 11, color: "#6B7280", marginBottom: 3 }}>Nachname</div>
-          <input type="text" value={nachname} onChange={e => setNachname(e.target.value)} placeholder="Nachname"
-            style={inputStyle} onKeyDown={e => { if (e.key === "Enter") handleSave(); }} />
-        </div>
-      </div>
-      <div style={{ marginBottom: 10 }}>
-        <div style={{ fontFamily: "Trebuchet MS, sans-serif", fontSize: 11, color: "#6B7280", marginBottom: 3 }}>Apotheke</div>
-        <input type="text" value={apotheke} onChange={e => setApotheke(e.target.value)} placeholder="Name der Apotheke"
-          style={inputStyle} onKeyDown={e => { if (e.key === "Enter") handleSave(); }} />
-      </div>
-      <div style={{ display: "flex", gap: 8 }}>
-        <button onClick={handleSave} disabled={!vorname.trim()} style={{
-          padding: "6px 18px", borderRadius: 6, border: "none",
-          background: vorname.trim() ? ORANGE : "#D1D5DB", color: "#fff",
-          fontFamily: "Trebuchet MS, sans-serif", fontSize: 13, fontWeight: 600,
-          cursor: vorname.trim() ? "pointer" : "default"
-        }}>{"\u2713"} Speichern</button>
-        {(vorname || nachname || apotheke) && (
-          <button onClick={handleClear} style={{
-            padding: "6px 14px", borderRadius: 6, border: "1px solid #D1D5DB",
+      {!showManual ? (
+        <div style={{ marginTop: 10 }}>
+          <button onClick={() => setShowManual(true)} style={{
+            padding: "5px 12px", borderRadius: 4, border: "1px solid #D1D5DB",
             background: "#fff", color: "#6B7280",
-            fontFamily: "Trebuchet MS, sans-serif", fontSize: 12, cursor: "pointer"
-          }}>Zur{"\u00fc"}cksetzen</button>
-        )}
-      </div>
+            fontFamily: "Trebuchet MS, sans-serif", fontSize: 11, cursor: "pointer"
+          }}>Manuell eintragen</button>
+        </div>
+      ) : (
+        <div>
+          <div style={{ fontFamily: "Trebuchet MS, sans-serif", fontSize: 11, color: "#9CA3AF", marginBottom: 6, marginTop: 4 }}>
+            Oder manuell eintragen:
+          </div>
+          <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontFamily: "Trebuchet MS, sans-serif", fontSize: 11, color: "#6B7280", marginBottom: 3 }}>Vorname</div>
+              <input type="text" value={vorname} onChange={e => setVorname(e.target.value)} placeholder="Vorname"
+                style={inputStyle} onKeyDown={e => { if (e.key === "Enter") handleSave(); }} />
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontFamily: "Trebuchet MS, sans-serif", fontSize: 11, color: "#6B7280", marginBottom: 3 }}>Nachname</div>
+              <input type="text" value={nachname} onChange={e => setNachname(e.target.value)} placeholder="Nachname"
+                style={inputStyle} onKeyDown={e => { if (e.key === "Enter") handleSave(); }} />
+            </div>
+          </div>
+          <div style={{ marginBottom: 10 }}>
+            <div style={{ fontFamily: "Trebuchet MS, sans-serif", fontSize: 11, color: "#6B7280", marginBottom: 3 }}>Apotheke</div>
+            <input type="text" value={apotheke} onChange={e => setApotheke(e.target.value)} placeholder="Name der Apotheke"
+              style={inputStyle} onKeyDown={e => { if (e.key === "Enter") handleSave(); }} />
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={handleSave} disabled={!vorname.trim()} style={{
+              padding: "6px 18px", borderRadius: 6, border: "none",
+              background: vorname.trim() ? ORANGE : "#D1D5DB", color: "#fff",
+              fontFamily: "Trebuchet MS, sans-serif", fontSize: 13, fontWeight: 600,
+              cursor: vorname.trim() ? "pointer" : "default"
+            }}>{"\u2713"} Speichern</button>
+            <button onClick={() => { handleClear(); setShowManual(false); }} style={{
+              padding: "6px 14px", borderRadius: 6, border: "1px solid #D1D5DB",
+              background: "#fff", color: "#6B7280",
+              fontFamily: "Trebuchet MS, sans-serif", fontSize: 12, cursor: "pointer"
+            }}>Abbrechen</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1514,13 +1520,14 @@ function App() {
               {/* Apo: free text Vorname/Nachname/Apotheke */}
               {program === "apo" && (
                 <ApoNameInput
+                  key={p.key}
                   initialData={currentAssignments[p.key] || null}
                   apoAssignments={apoAssignments}
                   participantKey={p.key}
                   onAssign={(data) => {
                     if (data) {
                       setApoAssignments(prev => ({ ...prev, [p.key]: data }));
-                      APO_PARTICIPANT_INFO[p.key] = { apotheke: data.apotheke || "", ort: "", plz: "", partner: false, kooperation: "", adm: "" };
+                      APO_PARTICIPANT_INFO[p.key] = { apotheke: data.apotheke || "", ort: data.ort || "", plz: data.plz || "", partner: data.partner || false, kooperation: data.kooperation || "", adm: data.adm || "" };
                     } else {
                       setApoAssignments(prev => { const n = {...prev}; delete n[p.key]; return n; });
                       APO_PARTICIPANT_INFO[p.key] = { apotheke: "", ort: "", plz: "", partner: false, kooperation: "", adm: "" };
