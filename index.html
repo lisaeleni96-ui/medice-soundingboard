@@ -292,7 +292,7 @@ function Sidebar({ participants, evaluations, currentIdx, onSelect, tbdAssignmen
   );
 }
 
-const YesNo = React.memo(function YesNo({ value, onChange, label, disabled }) {
+function YesNo({ value, onChange, label, disabled }) {
   return (
     <div style={{ marginBottom: 16 }}>
       <div style={{ fontFamily: "Trebuchet MS, sans-serif", fontSize: 13, fontWeight: 600, color: BLACK, marginBottom: 6 }}>
@@ -313,9 +313,9 @@ const YesNo = React.memo(function YesNo({ value, onChange, label, disabled }) {
       </div>
     </div>
   );
-});
+}
 
-const PosNeg = React.memo(function PosNeg({ value, onChange, label }) {
+function PosNeg({ value, onChange, label }) {
   return (
     <div style={{ marginBottom: 16 }}>
       <div style={{ fontFamily: "Trebuchet MS, sans-serif", fontSize: 13, fontWeight: 600, color: BLACK, marginBottom: 6 }}>{label}</div>
@@ -332,9 +332,9 @@ const PosNeg = React.memo(function PosNeg({ value, onChange, label }) {
       </div>
     </div>
   );
-});
+}
 
-const Dreistufig = React.memo(function Dreistufig({ value, onChange, label }) {
+function Dreistufig({ value, onChange, label }) {
   return (
     <div style={{ marginBottom: 16 }}>
       <div style={{ fontFamily: "Trebuchet MS, sans-serif", fontSize: 13, fontWeight: 600, color: BLACK, marginBottom: 6 }}>{label}</div>
@@ -354,9 +354,9 @@ const Dreistufig = React.memo(function Dreistufig({ value, onChange, label }) {
       </div>
     </div>
   );
-});
+}
 
-const TextInput = React.memo(function TextInput({ value, onChange, label }) {
+function TextInput({ value, onChange, label }) {
   const [localValue, setLocalValue] = useState(value || "");
   const latestParentValue = useRef(value);
   // Only sync from parent if the parent value genuinely changed (e.g. loaded from DB)
@@ -375,9 +375,9 @@ const TextInput = React.memo(function TextInput({ value, onChange, label }) {
         onBlur={e => { e.target.style.borderColor = "#D1D5DB"; latestParentValue.current = localValue; if (onChange) onChange(localValue); }} />
     </div>
   );
-});
+}
 
-const Decision = React.memo(function Decision({ value, onChange }) {
+function Decision({ value, onChange }) {
   return (
     <div style={{ marginTop: 20, paddingTop: 18, borderTop: "2px solid #E5E7EB" }}>
       <div style={{ fontFamily: "Trebuchet MS, sans-serif", fontSize: 15, fontWeight: 700, color: BLACK, marginBottom: 12 }}>Entscheidung</div>
@@ -399,7 +399,7 @@ const Decision = React.memo(function Decision({ value, onChange }) {
       </div>
     </div>
   );
-});
+}
 
 function EvalForm({ evaluation, onUpdate, criteria }) {
   const ev = evaluation || {};
@@ -418,7 +418,7 @@ function EvalForm({ evaluation, onUpdate, criteria }) {
   );
 }
 
-const TbdNameInput = React.memo(function TbdNameInput({ participantKey, currentName, onAssign, participants, tbdAssignments }) {
+function TbdNameInput({ participantKey, currentName, onAssign, participants, tbdAssignments }) {
   const [inputVal, setInputVal] = useState("");
   const [suggestions, setSuggestions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -541,9 +541,9 @@ const TbdNameInput = React.memo(function TbdNameInput({ participantKey, currentN
       )}
     </div>
   );
-});
+}
 
-const ApoNameInput = React.memo(function ApoNameInput({ onAssign, initialData, apoAssignments, participantKey }) {
+function ApoNameInput({ onAssign, initialData, apoAssignments, participantKey }) {
   const [vorname, setVorname] = useState(initialData ? initialData.name.split(" ")[0] : "");
   const [nachname, setNachname] = useState(initialData ? initialData.name.split(" ").slice(1).join(" ") : "");
   const [apotheke, setApotheke] = useState(initialData ? initialData.apotheke : "");
@@ -700,7 +700,7 @@ const ApoNameInput = React.memo(function ApoNameInput({ onAssign, initialData, a
       )}
     </div>
   );
-});
+}
 
 const APP_PASSWORD = "soundingboard2026";
 
@@ -1497,7 +1497,7 @@ function App() {
           const d = payload.new?.data;
           if (!d) return;
           // Ignore echoes from own save (within 2s)
-          if (Date.now() - lastSaveTime.current < 2000) return;
+          if (Date.now() - lastSaveTime.current < 5000) return;
           if (d.tbdAssignments) setTbdAssignments(d.tbdAssignments);
           if (d.apoAssignments) setApoAssignments(d.apoAssignments);
           if (d.apoParticipants && d.apoParticipants.length > 0) setApoParticipants(d.apoParticipants);
@@ -1513,10 +1513,23 @@ function App() {
           .on("postgres_changes", { event: "UPDATE", schema: "public", table: "soundingboard", filter: "id=eq." + supabaseId }, (payload) => {
             const d = payload.new?.data;
             if (!d) return;
-            if (Date.now() - lastSaveTime.current < 2000) return;
+            if (Date.now() - lastSaveTime.current < 5000) return;
             skipNextSync.current = true;
-            if (d.evals) setEvals(d.evals);
-            if (d.apoEvals) setApoEvals(d.apoEvals);
+            // MERGE incoming evals with local state instead of overwriting
+            if (d.evals) setEvals(prev => {
+              const merged = { ...prev };
+              Object.keys(d.evals).forEach(k => {
+                if (!prev[k] || !prev[k].entscheidung) merged[k] = { ...prev[k], ...d.evals[k] };
+              });
+              return merged;
+            });
+            if (d.apoEvals) setApoEvals(prev => {
+              const merged = { ...prev };
+              Object.keys(d.apoEvals).forEach(k => {
+                if (!prev[k] || !prev[k].entscheidung) merged[k] = { ...prev[k], ...d.apoEvals[k] };
+              });
+              return merged;
+            });
             setSyncStatus("synced");
           })
           .subscribe();
@@ -1534,6 +1547,8 @@ function App() {
     if (!supabase || !sessionMode || syncStatus === "loading") return;
     if (skipNextSync.current) { skipNextSync.current = false; return; }
     if (saveTimer.current) clearTimeout(saveTimer.current);
+    // Set echo guard IMMEDIATELY when data changes (not inside the timeout!)
+    lastSaveTime.current = Date.now();
     saveTimer.current = setTimeout(async () => {
       setSyncStatus("saving");
       lastSaveTime.current = Date.now();
