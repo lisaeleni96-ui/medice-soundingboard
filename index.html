@@ -401,30 +401,22 @@ const Decision = React.memo(function Decision({ value, onChange }) {
   );
 });
 
-const EvalForm = React.memo(function EvalForm({ evaluation, onUpdate, criteria }) {
-  // No local state needed - button inputs update parent directly,
-  // TextInput manages its own local state and syncs on blur
+function EvalForm({ evaluation, onUpdate, criteria }) {
   const ev = evaluation || {};
-
-  // Only send the changed field - parent merges it (no stale closure issue)
-  const handleFieldChange = useCallback((fieldId, value) => {
-    onUpdate({ [fieldId]: value });
-  }, [onUpdate]);
-
   const fields = criteria || PTA_CRITERIA;
   return (
     <div>
       {fields.map(c => {
-        if (c.type === "yesno") return <YesNo key={c.id} label={c.label} value={ev[c.id]} onChange={v => handleFieldChange(c.id, v)} disabled={c.readonly} />;
-        if (c.type === "posneg") return <PosNeg key={c.id} label={c.label} value={ev[c.id]} onChange={v => handleFieldChange(c.id, v)} />;
-        if (c.type === "text") return <TextInput key={c.id} label={c.label} value={ev[c.id]} onChange={v => handleFieldChange(c.id, v)} />;
-        if (c.type === "dreistufig") return <Dreistufig key={c.id} label={c.label} value={ev[c.id]} onChange={v => handleFieldChange(c.id, v)} />;
-        if (c.type === "decision") return <Decision key={c.id} value={ev[c.id]} onChange={v => handleFieldChange(c.id, v)} />;
+        if (c.type === "yesno") return <YesNo key={c.id} label={c.label} value={ev[c.id]} onChange={v => onUpdate(c.id, v)} disabled={c.readonly} />;
+        if (c.type === "posneg") return <PosNeg key={c.id} label={c.label} value={ev[c.id]} onChange={v => onUpdate(c.id, v)} />;
+        if (c.type === "text") return <TextInput key={c.id} label={c.label} value={ev[c.id]} onChange={v => onUpdate(c.id, v)} />;
+        if (c.type === "dreistufig") return <Dreistufig key={c.id} label={c.label} value={ev[c.id]} onChange={v => onUpdate(c.id, v)} />;
+        if (c.type === "decision") return <Decision key={c.id} value={ev[c.id]} onChange={v => onUpdate(c.id, v)} />;
         return null;
       })}
     </div>
   );
-});
+}
 
 const TbdNameInput = React.memo(function TbdNameInput({ participantKey, currentName, onAssign, participants, tbdAssignments }) {
   const [inputVal, setInputVal] = useState("");
@@ -1610,8 +1602,8 @@ function App() {
     }
   }, [idx, view, p.key, program, currentAssignments]);
 
-  const update = useCallback((partialVal) => {
-    setCurrentEvals(prev => ({ ...prev, [p.key]: { ...(prev[p.key] || {}), ...partialVal } }));
+  const update = useCallback((field, value) => {
+    setCurrentEvals(prev => ({ ...prev, [p.key]: { ...(prev[p.key] || {}), [field]: value } }));
   }, [p.key, program]);
 
   const downloadExcelGlobal = useCallback(() => {
