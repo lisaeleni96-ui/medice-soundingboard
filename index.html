@@ -977,7 +977,7 @@ function EmailScreen({ onSubmit }) {
   );
 }
 
-function Summary({ participants, evaluations, tbdAssignments, participantInfo, program, onSwitchToApo, allEvals, allParticipants, sessionMode, userEmail }) {
+function Summary({ participants, evaluations, tbdAssignments, participantInfo, program, onSwitchToApo, allEvals, allParticipants, sessionMode, userEmail, onBack, onAuswertung }) {
   const invite = participants.filter(p => evaluations[p.key]?.entscheidung === "einladen");
   const reject = participants.filter(p => evaluations[p.key]?.entscheidung === "nicht_einladen");
   const open = participants.filter(p => !evaluations[p.key]?.entscheidung);
@@ -1120,7 +1120,14 @@ function Summary({ participants, evaluations, tbdAssignments, participantInfo, p
   return (
     <div style={{ padding: 32 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24, flexWrap: "wrap", gap: 10 }}>
-        <div>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          {onBack && (
+            <button onClick={onBack} style={{
+              padding: "6px 14px", borderRadius: 6, border: "1.5px solid #D1D5DB",
+              background: "#fff", color: BLACK, fontFamily: "Trebuchet MS, sans-serif",
+              fontSize: 13, fontWeight: 600, cursor: "pointer"
+            }}>{"\u2190"} Zur\u00fcck</button>
+          )}
           <h2 style={{ fontFamily: "Trebuchet MS, sans-serif", fontSize: 20, fontWeight: 700, color: program === "apo" ? ORANGE : PETROL, margin: 0 }}>
             {program === "apo" ? "Apo Think!" : "PTA Think!"} {"\u2013"} Deine Auswahl
           </h2>
@@ -1141,13 +1148,10 @@ function Summary({ participants, evaluations, tbdAssignments, participantInfo, p
           )}
         </div>
       </div>
-      <Group title="Einladen" items={invite} color="#059669" icon={"\u2713"} />
-      <Group title="Nicht einladen" items={reject} color="#DC2626" icon={"\u2717"} />
-      <Group title="Noch offen" items={open} color="#9CA3AF" icon={"\u25CB"} />
 
-      {/* Flow navigation */}
+      {/* PTA: Weiter zu Apo Think */}
       {program === "pta" && onSwitchToApo && (
-        <div style={{ marginTop: 32, padding: "20px 24px", background: "#FFF8EE", borderRadius: 12, border: "1.5px solid " + ORANGE + "40", textAlign: "center" }}>
+        <div style={{ marginBottom: 24, padding: "20px 24px", background: "#FFF8EE", borderRadius: 12, border: "1.5px solid " + ORANGE + "40", textAlign: "center" }}>
           <div style={{ fontFamily: "Trebuchet MS, sans-serif", fontSize: 15, fontWeight: 600, color: BLACK, marginBottom: 8 }}>
             PTA Think! Auswahl abgeschlossen?
           </div>
@@ -1161,6 +1165,27 @@ function Summary({ participants, evaluations, tbdAssignments, participantInfo, p
           }}>Weiter zu Apo Think! {"\u2192"}</button>
         </div>
       )}
+
+      {/* Apo: Hinweis auf Auswertung */}
+      {program === "apo" && onAuswertung && (
+        <div style={{ marginBottom: 24, padding: "20px 24px", background: "#EFF9FA", borderRadius: 12, border: "1.5px solid " + PETROL + "40", textAlign: "center" }}>
+          <div style={{ fontFamily: "Trebuchet MS, sans-serif", fontSize: 15, fontWeight: 600, color: BLACK, marginBottom: 8 }}>
+            Apo Think! Auswahl abgeschlossen?
+          </div>
+          <div style={{ fontFamily: "Trebuchet MS, sans-serif", fontSize: 13, color: "#6B7280", marginBottom: 16 }}>
+            Vergleiche jetzt die Bewertungen beider Teams in der Auswertung
+          </div>
+          <button onClick={onAuswertung} style={{
+            padding: "12px 32px", borderRadius: 8, border: "none",
+            background: PETROL, color: "#fff", fontFamily: "Trebuchet MS, sans-serif",
+            fontSize: 15, fontWeight: 700, cursor: "pointer"
+          }}>Zur Auswertung {"\u2192"}</button>
+        </div>
+      )}
+
+      <Group title="Einladen" items={invite} color="#059669" icon={"\u2713"} />
+      <Group title="Nicht einladen" items={reject} color="#DC2626" icon={"\u2717"} />
+      <Group title="Noch offen" items={open} color="#9CA3AF" icon={"\u25CB"} />
     </div>
   );
 }
@@ -1895,7 +1920,9 @@ function App() {
           <div style={{ flex: 1, overflowY: "auto" }}><Summary
             participants={currentParticipants} evaluations={currentEvals}
             tbdAssignments={currentAssignments} participantInfo={currentInfo} program={program}
+            onBack={() => setView("eval")}
             onSwitchToApo={() => { setProgram("apo"); setIdx(0); setView("eval"); }}
+            onAuswertung={() => setView("auswertung")}
             allEvals={{ pta: evals, apo: apoEvals }}
             allParticipants={{ pta: PARTICIPANTS, apo: APO_PARTICIPANTS_TEMPLATE, ptaAssignments: tbdAssignments, apoAssignments: apoAssignments }}
             sessionMode={sessionMode} userEmail={userEmail}
