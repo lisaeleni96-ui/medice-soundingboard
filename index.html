@@ -1655,24 +1655,24 @@ function App() {
       // Deep diagnostic: log exact karin_heisler eval being saved
       const kh = _evals && _evals["karin_heisler"];
       console.log("[doSave] karin_heisler keys:", kh ? Object.keys(kh).join(",") : "MISSING", "zusatzinfo:", kh ? kh.zusatzinfo : "N/A");
-      console.log("[doSave] Saving evals to", _supabaseId, "via direct PATCH");
+      console.log("[doSave] Saving evals to", _supabaseId, "via UPSERT (POST with on_conflict)");
       let userErr = null;
       try {
-        const patchBody = JSON.stringify({ data: userSave, updated_at: new Date().toISOString() });
-        console.log("[doSave] PATCH body length:", patchBody.length);
-        const resp = await fetch(SUPA_URL + "/rest/v1/soundingboard?id=eq." + encodeURIComponent(_supabaseId), {
-          method: "PATCH",
+        const upsertBody = JSON.stringify({ id: _supabaseId, data: userSave, updated_at: new Date().toISOString() });
+        console.log("[doSave] UPSERT body length:", upsertBody.length);
+        const resp = await fetch(SUPA_URL + "/rest/v1/soundingboard", {
+          method: "POST",
           headers: {
             "apikey": SUPA_KEY,
             "Authorization": "Bearer " + SUPA_KEY,
             "Content-Type": "application/json",
-            "Prefer": "return=representation"
+            "Prefer": "return=representation,resolution=merge-duplicates"
           },
-          body: patchBody
+          body: upsertBody
         });
         if (!resp.ok) {
           const errText = await resp.text();
-          userErr = { message: "PATCH " + resp.status + ": " + errText };
+          userErr = { message: "UPSERT " + resp.status + ": " + errText };
         } else {
           // Log what the server actually wrote
           try {
