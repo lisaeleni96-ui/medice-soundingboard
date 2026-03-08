@@ -1580,18 +1580,17 @@ function App() {
       const SUPA_URL = "https://osjevsltrfcvflhxrvgc.supabase.co";
       const SUPA_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9zamV2c2x0cmZjdmZsaHhydmdjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2MTcyODAsImV4cCI6MjA4ODE5MzI4MH0.NZFyz81Kh9kPfBx6suAbHSCrym-ruCfH8u32riAj51I";
 
-      // 1) Always save assignments to "main" — use direct PATCH to avoid overwriting other rows
-      const mainReadResp = await fetch(SUPA_URL + "/rest/v1/soundingboard?id=eq.main&select=data", {
-        method: "GET",
-        headers: { "apikey": SUPA_KEY, "Authorization": "Bearer " + SUPA_KEY }
-      });
-      const mainRows = await mainReadResp.json();
-      const mainCurrent = mainRows && mainRows[0] ? mainRows[0] : null;
-      const mainSave = mainCurrent?.data ? { ...mainCurrent.data } : {};
-      mainSave.tbdAssignments = _tbdAssignments;
-      mainSave.apoAssignments = _apoAssignments;
-      mainSave.apoParticipants = _apoParticipants;
-      mainSave.ptaParticipants = _ptaParticipants;
+      // 1) Always save assignments to "main" — NO read needed, write only assignment fields
+      // CRITICAL FIX: Do NOT read+spread mainCurrent.data!
+      // The old spread { ...mainCurrent.data } copied stale evals into the main row body.
+      // When the main PATCH got 503 and was retried server-side without the ?id=eq.main filter,
+      // it overwrote ALL rows (including user rows) with stale data, destroying user evals.
+      const mainSave = {
+        tbdAssignments: _tbdAssignments,
+        apoAssignments: _apoAssignments,
+        apoParticipants: _apoParticipants,
+        ptaParticipants: _ptaParticipants
+      };
       let mainErr = null;
       try {
         const mainPatchBody = JSON.stringify({ data: mainSave, updated_at: new Date().toISOString() });
