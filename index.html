@@ -1959,8 +1959,9 @@ function App() {
             sessionMode={sessionMode} userEmail={userEmail}
           /></div>
         ) : (
-          <div style={{ flex: 1, overflowY: "auto", display: "flex", justifyContent: "center" }}>
-            <div style={{ width: "100%", maxWidth: 620, padding: "24px 28px 40px" }}>
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+            <div style={{ flex: 1, overflowY: "auto", display: "flex", justifyContent: "center" }}>
+            <div style={{ width: "100%", maxWidth: 620, padding: "24px 28px 20px" }}>
               {/* Person header with LARGE photo + Info */}
               <div style={{ display: "flex", alignItems: "flex-start", gap: 20, marginBottom: 24, padding: "16px 20px", background: "#fff", borderRadius: 12, border: "1px solid #E5E7EB", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
                 {personPhoto ? (
@@ -2006,71 +2007,46 @@ function App() {
                 </div>
               </div>
 
-              {/* PTA: TBD Name Assignment (only TBD2) */}
-              {program === "pta" && p.key === "tbd2" && (
-                <TbdNameInput
-                  participantKey={p.key}
-                  currentName={displayName}
-                  participants={currentParticipants}
-                  tbdAssignments={tbdAssignments}
-                  onAssign={(data) => {
-                    if (data) {
-                      setTbdAssignments(prev => ({ ...prev, [p.key]: data }));
-                      PARTICIPANT_INFO[p.key] = {
-                        apotheke: data.apotheke || "", ort: data.ort || "", plz: data.plz || "",
-                        partner: data.partner || false, ptaFamily: data.ptaFamily || false,
-                        kooperation: data.kooperation || "", adm: data.adm || ""
-                      };
-                      setInitialized(prev => { const n = {...prev}; delete n[p.key + "_pta"]; return n; });
-                    } else {
-                      setTbdAssignments(prev => { const n = {...prev}; delete n[p.key]; return n; });
-                      PARTICIPANT_INFO[p.key] = { apotheke: "", ort: "", plz: "", partner: false, ptaFamily: false, kooperation: "", adm: "" };
-                    }
-                  }}
-                />
-              )}
-              {/* Apo Zuordnung entfernt — alle bereits zugeordnet */}
+              {/* Zuordnung entfernt — alle bereits zugeordnet (PTA + APO) */}
 
               {/* Form */}
               <div style={{ background: "#fff", borderRadius: 10, padding: "24px 28px", boxShadow: "0 1px 3px rgba(0,0,0,0.05)", border: "1px solid #E5E7EB" }}>
                 <EvalForm evaluation={ev} onUpdate={update} criteria={currentCriteria} />
               </div>
+            </div>
+            </div>
 
-              {/* Navigation */}
-              {/* Navigation — Weiter/Zurück speichern automatisch */}
-              <div style={{ display: "flex", justifyContent: "space-between", marginTop: 20 }}>
-                <button onClick={async () => { if (idx > 0) { await handleManualSave(); setIdx(idx - 1); } }} disabled={idx === 0} style={{
-                  padding: "10px 22px", borderRadius: 6, border: "1.5px solid #D1D5DB",
-                  background: "#fff", color: idx === 0 ? "#D1D5DB" : BLACK,
-                  fontFamily: "Trebuchet MS, sans-serif", fontSize: 14, fontWeight: 600,
-                  cursor: idx === 0 ? "default" : "pointer", opacity: idx === 0 ? 0.4 : 1
-                }}>{"\u2190"} Zur{"\u00fc"}ck</button>
-                <button onClick={async () => { if (idx < currentParticipants.length - 1) { await handleManualSave(); setIdx(idx + 1); } }}
-                  disabled={idx === currentParticipants.length - 1} style={{
-                  padding: "10px 22px", borderRadius: 8, border: "none",
-                  background: idx === currentParticipants.length - 1 ? "#D1D5DB" : (program === "apo" ? ORANGE : PETROL), color: "#fff",
-                  fontFamily: "Trebuchet MS, sans-serif", fontSize: 15, fontWeight: 700,
-                  cursor: idx === currentParticipants.length - 1 ? "default" : "pointer",
-                  opacity: idx === currentParticipants.length - 1 ? 0.4 : 1
-                }}>Weiter & Speichern {"\u2192"}</button>
-              </div>
-
-              {/* Einzelner Speichern-Button entfernt — Weiter & Speichern reicht */}
-
-              {/* Excel + Zusammenfassung Buttons */}
-              <div style={{ display: "flex", gap: 10, marginTop: 10, paddingBottom: 24 }}>
-                <button onClick={downloadExcelGlobal} style={{
-                  flex: 1, padding: "12px 16px", borderRadius: 8, border: "1.5px solid " + PETROL,
-                  background: "#fff", color: PETROL,
-                  fontFamily: "Trebuchet MS, sans-serif", fontSize: 14, fontWeight: 600, cursor: "pointer",
-                  display: "flex", alignItems: "center", justifyContent: "center", gap: 8
-                }}>Excel herunterladen</button>
-                <button onClick={async () => { await handleManualSave(); setView("summary"); }} style={{
-                  flex: 1, padding: "12px 16px", borderRadius: 8, border: "none",
-                  background: ORANGE, color: "#fff",
-                  fontFamily: "Trebuchet MS, sans-serif", fontSize: 14, fontWeight: 600, cursor: "pointer",
-                  display: "flex", alignItems: "center", justifyContent: "center", gap: 8
-                }}>{"\u2713"} Fertig</button>
+            {/* Sticky Navigation Footer */}
+            <div style={{ borderTop: "1px solid #E5E7EB", background: "#fff", padding: "12px 28px", display: "flex", justifyContent: "center" }}>
+              <div style={{ width: "100%", maxWidth: 620, display: "flex", flexDirection: "column", gap: 8 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+                  <button onClick={async () => { if (idx > 0) { await handleManualSave(); setIdx(idx - 1); } }} disabled={idx === 0} style={{
+                    padding: "10px 22px", borderRadius: 6, border: "1.5px solid #D1D5DB",
+                    background: "#fff", color: idx === 0 ? "#D1D5DB" : BLACK,
+                    fontFamily: "Trebuchet MS, sans-serif", fontSize: 14, fontWeight: 600,
+                    cursor: idx === 0 ? "default" : "pointer", opacity: idx === 0 ? 0.4 : 1
+                  }}>{"\u2190"} Zur{"\u00fc"}ck</button>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button onClick={downloadExcelGlobal} style={{
+                      padding: "10px 16px", borderRadius: 6, border: "1.5px solid " + PETROL,
+                      background: "#fff", color: PETROL,
+                      fontFamily: "Trebuchet MS, sans-serif", fontSize: 13, fontWeight: 600, cursor: "pointer"
+                    }}>Excel</button>
+                    <button onClick={async () => { await handleManualSave(); setView("summary"); }} style={{
+                      padding: "10px 16px", borderRadius: 6, border: "none",
+                      background: ORANGE, color: "#fff",
+                      fontFamily: "Trebuchet MS, sans-serif", fontSize: 13, fontWeight: 600, cursor: "pointer"
+                    }}>{"\u2713"} Fertig</button>
+                  </div>
+                  <button onClick={async () => { if (idx < currentParticipants.length - 1) { await handleManualSave(); setIdx(idx + 1); } }}
+                    disabled={idx === currentParticipants.length - 1} style={{
+                    padding: "10px 22px", borderRadius: 8, border: "none",
+                    background: idx === currentParticipants.length - 1 ? "#D1D5DB" : (program === "apo" ? ORANGE : PETROL), color: "#fff",
+                    fontFamily: "Trebuchet MS, sans-serif", fontSize: 15, fontWeight: 700,
+                    cursor: idx === currentParticipants.length - 1 ? "default" : "pointer",
+                    opacity: idx === currentParticipants.length - 1 ? 0.4 : 1
+                  }}>Weiter & Speichern {"\u2192"}</button>
+                </div>
               </div>
             </div>
           </div>
