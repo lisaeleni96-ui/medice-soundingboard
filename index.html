@@ -1669,15 +1669,22 @@ function App() {
   // No more auto-save on every keystroke — this avoids race conditions with visibility/unload handlers
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [saveButtonFlash, setSaveButtonFlash] = useState("");
+  const loadSettled = useRef(false);
 
-  // Track when data changes (after initial load)
+  // Mark load as settled 3 seconds after data loads — prevents false "unsaved" detection
+  useEffect(() => {
+    if (syncStatusRef.current !== "loading" && !loadSettled.current) {
+      const t = setTimeout(() => { loadSettled.current = true; console.log("[CHANGE] Load settled, now tracking changes"); }, 3000);
+      return () => clearTimeout(t);
+    }
+  });
+
+  // Track when data changes (only after initial load has fully settled)
   useEffect(() => {
     if (!supabase || !sessionMode) return;
-    if (syncStatusRef.current === "loading") return;
-    if (Date.now() - dataLoadedAt.current < 1500) return;
+    if (!loadSettled.current) return;
     setHasUnsavedChanges(true);
-    // Update pendingDataRef for beforeunload safety net
-    pendingDataRef.current = { _evals: evals, _apoEvals: apoEvals, _program: program, _userEmail: userEmail, _tbdAssignments: tbdAssignments, _apoAssignments: apoAssignments, _apoParticipants: apoParticipants, _ptaParticipants: ptaParticipants, _supabaseId: supabaseId };
+    console.log("[CHANGE] Data changed, marking unsaved");
   }, [evals, apoEvals, program, tbdAssignments, apoAssignments, apoParticipants, ptaParticipants]);
 
   // Manual save function — called by "Speichern" button
@@ -1705,34 +1712,9 @@ function App() {
     }
   }, [doSave]);
 
-  // beforeunload ONLY: save unsaved data when page is actually closing
-  // REMOVED visibilitychange handler — it was causing stale data overwrites
-  useEffect(() => {
-    const SUPA_URL = "https://osjevsltrfcvflhxrvgc.supabase.co";
-    const SUPA_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9zamV2c2x0cmZjdmZsaHhydmdjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2MTcyODAsImV4cCI6MjA4ODE5MzI4MH0.NZFyz81Kh9kPfBx6suAbHSCrym-ruCfH8u32riAj51I";
-    const handleUnload = () => {
-      const sd = pendingDataRef.current;
-      if (sd && sd._supabaseId) {
-        console.log("[UNLOAD] Saving unsaved changes via keepalive fetch");
-        const userSave = { evals: sd._evals, apoEvals: sd._apoEvals, program: sd._program, userEmail: sd._userEmail };
-        try {
-          fetch(SUPA_URL + "/rest/v1/soundingboard?id=eq." + encodeURIComponent(sd._supabaseId), {
-            method: "PATCH",
-            headers: { "apikey": SUPA_KEY, "Authorization": "Bearer " + SUPA_KEY, "Content-Type": "application/json", "Prefer": "return=minimal" },
-            body: JSON.stringify({ data: userSave, updated_at: new Date().toISOString() }),
-            keepalive: true
-          });
-        } catch(e) { console.error("Unload save error:", e); }
-        pendingDataRef.current = null;
-      } else {
-        console.log("[UNLOAD] No unsaved changes, skipping save");
-      }
-    };
-    window.addEventListener("beforeunload", handleUnload);
-    return () => {
-      window.removeEventListener("beforeunload", handleUnload);
-    };
-  }, []);
+  // beforeunload and visibilitychange handlers REMOVED entirely.
+  // They were causing data loss by overwriting good data with stale data on page reload.
+  // Manual save buttons ("Speichern", "Weiter & Speichern") are the only save mechanism now.
 
   const currentParticipants = program === "apo" ? apoParticipants : ptaParticipants;
   const currentEvals = program === "apo" ? apoEvals : evals;
