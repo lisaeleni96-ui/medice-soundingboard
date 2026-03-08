@@ -1585,21 +1585,44 @@ function App() {
     lastSaveTime.current = Date.now();
     try {
       const { _evals, _apoEvals, _program, _userEmail, _tbdAssignments, _apoAssignments, _apoParticipants, _ptaParticipants, _supabaseId } = saveData;
-      // 1) Always save assignments to "main"
-      const { data: mainCurrent } = await supabase.from("soundingboard").select("data").eq("id", "main").single();
+      const SUPA_URL = "https://osjevsltrfcvflhxrvgc.supabase.co";
+      const SUPA_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9zamV2c2x0cmZjdmZsaHhydmdjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2MTcyODAsImV4cCI6MjA4ODE5MzI4MH0.NZFyz81Kh9kPfBx6suAbHSCrym-ruCfH8u32riAj51I";
+
+      // 1) Always save assignments to "main" — use direct PATCH to avoid overwriting other rows
+      const mainReadResp = await fetch(SUPA_URL + "/rest/v1/soundingboard?id=eq.main&select=data", {
+        method: "GET",
+        headers: { "apikey": SUPA_KEY, "Authorization": "Bearer " + SUPA_KEY }
+      });
+      const mainRows = await mainReadResp.json();
+      const mainCurrent = mainRows && mainRows[0] ? mainRows[0] : null;
       const mainSave = mainCurrent?.data ? { ...mainCurrent.data } : {};
       mainSave.tbdAssignments = _tbdAssignments;
       mainSave.apoAssignments = _apoAssignments;
       mainSave.apoParticipants = _apoParticipants;
       mainSave.ptaParticipants = _ptaParticipants;
-      const { error: mainErr } = await supabase.from("soundingboard").upsert({
-        id: "main", data: mainSave, updated_at: new Date().toISOString()
-      });
+      let mainErr = null;
+      try {
+        const mainPatchBody = JSON.stringify({ data: mainSave, updated_at: new Date().toISOString() });
+        const mainResp = await fetch(SUPA_URL + "/rest/v1/soundingboard?id=eq.main", {
+          method: "PATCH",
+          headers: {
+            "apikey": SUPA_KEY,
+            "Authorization": "Bearer " + SUPA_KEY,
+            "Content-Type": "application/json",
+            "Prefer": "return=minimal"
+          },
+          body: mainPatchBody
+        });
+        if (!mainResp.ok) {
+          const errText = await mainResp.text();
+          mainErr = { message: "PATCH main " + mainResp.status + ": " + errText };
+        }
+      } catch(mainFetchErr) {
+        mainErr = { message: "fetch main error: " + mainFetchErr.message };
+      }
       console.log("Save main:", mainErr ? "ERROR: " + mainErr.message : "OK");
 
       // 2) Save evals to own row — use direct REST PATCH (proven reliable)
-      const SUPA_URL = "https://osjevsltrfcvflhxrvgc.supabase.co";
-      const SUPA_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9zamV2c2x0cmZjdmZsaHhydmdjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2MTcyODAsImV4cCI6MjA4ODE5MzI4MH0.NZFyz81Kh9kPfBx6suAbHSCrym-ruCfH8u32riAj51I";
       const userSave = { evals: _evals, apoEvals: _apoEvals, program: _program, userEmail: _userEmail };
       // Deep diagnostic: log exact karin_heisler eval being saved
       const kh = _evals && _evals["karin_heisler"];
