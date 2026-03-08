@@ -360,7 +360,6 @@ const TextInput = React.memo(function TextInput({ value, onChange, label }) {
   const [localValue, setLocalValue] = useState(value || "");
   const latestParentValue = useRef(value);
   const isFocused = useRef(false);
-  const debounceRef = useRef(null);
   // Only sync from parent if genuinely changed AND user is NOT currently editing
   useEffect(() => {
     if (value !== latestParentValue.current && !isFocused.current) {
@@ -368,15 +367,13 @@ const TextInput = React.memo(function TextInput({ value, onChange, label }) {
       latestParentValue.current = value;
     }
   }, [value]);
-  // Debounced onChange: propagate to parent while typing (every 800ms)
+  // No debounce — propagate to parent immediately on every keystroke
+  // The parent's save effect has its own 200ms debounce, so this is safe
   const handleChange = (e) => {
     const val = e.target.value;
     setLocalValue(val);
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => {
-      latestParentValue.current = val;
-      if (onChange) onChange(val);
-    }, 300);
+    latestParentValue.current = val;
+    if (onChange) onChange(val);
   };
   return (
     <div style={{ marginBottom: 16 }}>
@@ -384,7 +381,7 @@ const TextInput = React.memo(function TextInput({ value, onChange, label }) {
       <textarea value={localValue} onChange={handleChange} rows={2} placeholder="Hier eingeben..."
         style={{ width: "100%", padding: "8px 12px", borderRadius: 6, border: "1.5px solid #D1D5DB", fontFamily: "Trebuchet MS, sans-serif", fontSize: 13, resize: "vertical", outline: "none", boxSizing: "border-box" }}
         onFocus={e => { e.target.style.borderColor = PETROL; isFocused.current = true; }}
-        onBlur={e => { e.target.style.borderColor = "#D1D5DB"; isFocused.current = false; latestParentValue.current = localValue; if (debounceRef.current) clearTimeout(debounceRef.current); console.log("[TextInput] onBlur →", label, "value:", localValue); if (onChange) onChange(localValue); }} />
+        onBlur={e => { e.target.style.borderColor = "#D1D5DB"; isFocused.current = false; latestParentValue.current = localValue; console.log("[TextInput] onBlur →", label, "value:", localValue); if (onChange) onChange(localValue); }} />
     </div>
   );
 });
@@ -1549,45 +1546,25 @@ function App() {
     };
     loadData();
 
-    // --- REALTIME: Listen for assignment changes from "main" AND eval changes from own row ---
-    if (channelRef.current) { channelRef.current.forEach(ch => supabase.removeChannel(ch)); }
-    const channels = [];
-    try {
-      // Always listen to "main" for assignment changes
-      const mainChannel = supabase.channel("sb_main_assignments")
-        .on("postgres_changes", { event: "UPDATE", schema: "public", table: "soundingboard", filter: "id=eq.main" }, (payload) => {
-          const d = payload.new?.data;
-          if (!d) return;
-          if (Date.now() - lastSaveTime.current < 5000) return;
-          // Only update state if data actually changed (prevents unnecessary re-renders/flicker)
-          if (d.tbdAssignments) setTbdAssignments(prev => JSON.stringify(prev) === JSON.stringify(d.tbdAssignments) ? prev : d.tbdAssignments);
-          if (d.apoAssignments) setApoAssignments(prev => JSON.stringify(prev) === JSON.stringify(d.apoAssignments) ? prev : d.apoAssignments);
-          if (d.apoParticipants && d.apoParticipants.length > 0) setApoParticipants(prev => JSON.stringify(prev) === JSON.stringify(d.apoParticipants) ? prev : d.apoParticipants);
-          if (d.ptaParticipants && d.ptaParticipants.length > 0) setPtaParticipants(prev => JSON.stringify(prev) === JSON.stringify(d.ptaParticipants) ? prev : d.ptaParticipants);
-          updateSyncStatus("synced");
-        })
-        .subscribe();
-      channels.push(mainChannel);
-
-      // Also listen to own row for eval sync across devices
-      {
-        const userChannel = supabase.channel("sb_" + supabaseId)
-          .on("postgres_changes", { event: "UPDATE", schema: "public", table: "soundingboard", filter: "id=eq." + supabaseId }, (payload) => {
-            const d = payload.new?.data;
-            if (!d) return;
-            if (Date.now() - lastSaveTime.current < 5000) return;
-            if (d.evals) setEvals(prev => JSON.stringify(prev) === JSON.stringify(d.evals) ? prev : d.evals);
-            if (d.apoEvals) setApoEvals(prev => JSON.stringify(prev) === JSON.stringify(d.apoEvals) ? prev : d.apoEvals);
-            updateSyncStatus("synced");
-          })
-          .subscribe();
-        channels.push(userChannel);
-      }
-
-      channelRef.current = channels;
-      return () => { channels.forEach(ch => supabase.removeChannel(ch)); channelRef.current = null; };
-    } catch(e) { console.error("Realtime error:", e); }
+    // --- REALTIME DISABLED ---
+    // Realtime listeners were causing an infinite feedback loop:
+    // Save → Supabase broadcasts change → listener receives it after 5s echo window →
+    // JSON.stringify comparison fails (key ordering changes through round-trip) →
+    // State updated → triggers new save → loop repeats → overwrites user data
+    // Since this app doesn't need real-time multi-device sync, we disable realtime entirely.
+    if (channelRef.current) { channelRef.current.forEach(ch => supabase.removeChannel(ch)); channelRef.current = null; }
+    console.log("[REALTIME] Disabled — data loads on page load only, no live sync");
   }, [sessionMode, userEmail]);
+
+  // Fix: Update sync indicator after DOM mount (ref may not be attached during initial load)
+  useEffect(() => {
+    const t = setTimeout(() => {
+      if (syncIndicatorRef.current && syncStatusRef.current) {
+        updateSyncStatus(syncStatusRef.current);
+      }
+    }, 500);
+    return () => clearTimeout(t);
+  }, [view]);
 
   // --- SAVE: Assignments always to "main", evals to own row ---
   const pendingDataRef = useRef(null);
