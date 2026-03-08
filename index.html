@@ -14,32 +14,21 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <!-- Supabase JS client REMOVED — all DB access via direct fetch to eliminate hidden write paths -->
   <script>
-    // Initialize Supabase BEFORE Babel loads (Babel overwrites window.supabase)
-    window.__SUPABASE_CLIENT__ = null;
-    try {
-      var sb = window.supabase;
-      var fn = sb.createClient || sb.default?.createClient;
-      if (!fn) {
-        // Try to find createClient in nested exports
-        var keys = Object.keys(sb);
-        for (var i = 0; i < keys.length; i++) {
-          if (typeof sb[keys[i]] === 'function' && keys[i].toLowerCase().includes('create')) {
-            fn = sb[keys[i]]; break;
-          }
+    // Sentinel value so existing "if (!supabase)" guards still work
+    window.__SUPABASE_CLIENT__ = true;
+    // --- GLOBAL FETCH MONITOR: Log every write to soundingboard ---
+    (function() {
+      var _origFetch = window.fetch;
+      window.fetch = function(url, opts) {
+        if (typeof url === "string" && url.indexOf("soundingboard") !== -1 && opts && opts.method && opts.method !== "GET") {
+          console.warn("[FETCH-MONITOR] " + opts.method + " " + url, "body-length:", opts.body ? opts.body.length : 0, "stack:", new Error().stack);
         }
-      }
-      if (fn) {
-        window.__SUPABASE_CLIENT__ = fn(
-          "https://osjevsltrfcvflhxrvgc.supabase.co",
-          "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9zamV2c2x0cmZjdmZsaHhydmdjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2MTcyODAsImV4cCI6MjA4ODE5MzI4MH0.NZFyz81Kh9kPfBx6suAbHSCrym-ruCfH8u32riAj51I"
-        );
-        console.log("Supabase connected!", window.__SUPABASE_CLIENT__);
-      } else {
-        console.error("createClient not found. Keys:", Object.keys(sb));
-      }
-    } catch(e) { console.error("Supabase init error:", e); }
+        return _origFetch.apply(this, arguments);
+      };
+    })();
+    console.log("[INIT] Supabase JS client removed. All DB via direct fetch. Fetch monitor active.");
   </script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
   <script type="text/babel">
@@ -1210,12 +1199,17 @@ function Auswertung({ onBack, ptaParticipants, apoParticipants, apoAssignments, 
     if (!supabase || !hEmail || !mEmail) return;
     setLoading(true);
     try {
-      const [hopfRes, mediceRes] = await Promise.all([
-        supabase.from("soundingboard").select("data").eq("id", "user_" + hEmail).single(),
-        supabase.from("soundingboard").select("data").eq("id", "user_" + mEmail).single()
+      const SUPA_URL = "https://osjevsltrfcvflhxrvgc.supabase.co";
+      const SUPA_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9zamV2c2x0cmZjdmZsaHhydmdjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2MTcyODAsImV4cCI6MjA4ODE5MzI4MH0.NZFyz81Kh9kPfBx6suAbHSCrym-ruCfH8u32riAj51I";
+      const hdrs = { "apikey": SUPA_KEY, "Authorization": "Bearer " + SUPA_KEY };
+      const [hopfResp, mediceResp] = await Promise.all([
+        fetch(SUPA_URL + "/rest/v1/soundingboard?id=eq.user_" + encodeURIComponent(hEmail) + "&select=data", { headers: hdrs }),
+        fetch(SUPA_URL + "/rest/v1/soundingboard?id=eq.user_" + encodeURIComponent(mEmail) + "&select=data", { headers: hdrs })
       ]);
-      setHopfData(hopfRes.data?.data || null);
-      setMediceData(mediceRes.data?.data || null);
+      const hopfRows = await hopfResp.json();
+      const mediceRows = await mediceResp.json();
+      setHopfData(hopfRows[0]?.data || null);
+      setMediceData(mediceRows[0]?.data || null);
     } catch(e) { console.error("Auswertung load error:", e); }
     setLoading(false);
   };
@@ -1519,11 +1513,15 @@ function App() {
     updateSyncStatus("loading");
     dataLoadedAt.current = Date.now();
     const loadData = async () => {
+      const SUPA_URL = "https://osjevsltrfcvflhxrvgc.supabase.co";
+      const SUPA_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9zamV2c2x0cmZjdmZsaHhydmdjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2MTcyODAsImV4cCI6MjA4ODE5MzI4MH0.NZFyz81Kh9kPfBx6suAbHSCrym-ruCfH8u32riAj51I";
+      const hdrs = { "apikey": SUPA_KEY, "Authorization": "Bearer " + SUPA_KEY };
       try {
-        // 1) Always load shared assignments from "main"
-        console.log("Loading shared assignments from 'main'...");
-        const { data: mainData, error: mainErr } = await supabase.from("soundingboard").select("data").eq("id", "main").single();
-        if (mainErr && mainErr.code !== "PGRST116") console.error("Main load error:", mainErr);
+        // 1) Always load shared assignments from "main" — via direct fetch
+        console.log("[LOAD] Loading shared assignments from 'main' via direct fetch...");
+        const mainResp = await fetch(SUPA_URL + "/rest/v1/soundingboard?id=eq.main&select=data", { headers: hdrs });
+        const mainRows = await mainResp.json();
+        const mainData = mainRows && mainRows[0] ? mainRows[0] : null;
         if (mainData?.data) {
           if (mainData.data.tbdAssignments) setTbdAssignments(mainData.data.tbdAssignments);
           if (mainData.data.apoAssignments) setApoAssignments(mainData.data.apoAssignments);
@@ -1531,29 +1529,23 @@ function App() {
           if (mainData.data.ptaParticipants && mainData.data.ptaParticipants.length > 0) setPtaParticipants(mainData.data.ptaParticipants);
         }
 
-        // 2) Load evals from own row
-        console.log("Loading evals from '" + supabaseId + "'...");
-        const { data, error } = await supabase.from("soundingboard").select("data").eq("id", supabaseId).single();
-        if (error && error.code !== "PGRST116") { console.error("Eval load error:", error); }
-        if (data?.data) {
-          if (data.data.evals) setEvals(data.data.evals);
-          if (data.data.apoEvals) setApoEvals(data.data.apoEvals);
-          if (data.data.program) setProgram(data.data.program);
+        // 2) Load evals from own row — via direct fetch
+        console.log("[LOAD] Loading evals from '" + supabaseId + "' via direct fetch...");
+        const userResp = await fetch(SUPA_URL + "/rest/v1/soundingboard?id=eq." + encodeURIComponent(supabaseId) + "&select=data", { headers: hdrs });
+        const userRows = await userResp.json();
+        const userData = userRows && userRows[0] ? userRows[0] : null;
+        if (userData?.data) {
+          if (userData.data.evals) setEvals(userData.data.evals);
+          if (userData.data.apoEvals) setApoEvals(userData.data.apoEvals);
+          if (userData.data.program) setProgram(userData.data.program);
         }
         dataLoadedAt.current = Date.now();
         updateSyncStatus("synced");
-      } catch(e) { console.error("Supabase catch:", e); updateSyncStatus("error"); }
+        console.log("[LOAD] Data loaded successfully. evals keys:", userData?.data?.evals ? Object.keys(userData.data.evals).length : 0);
+      } catch(e) { console.error("Load catch:", e); updateSyncStatus("error"); }
     };
     loadData();
-
-    // --- REALTIME DISABLED ---
-    // Realtime listeners were causing an infinite feedback loop:
-    // Save → Supabase broadcasts change → listener receives it after 5s echo window →
-    // JSON.stringify comparison fails (key ordering changes through round-trip) →
-    // State updated → triggers new save → loop repeats → overwrites user data
-    // Since this app doesn't need real-time multi-device sync, we disable realtime entirely.
-    if (channelRef.current) { channelRef.current.forEach(ch => supabase.removeChannel(ch)); channelRef.current = null; }
-    console.log("[REALTIME] Disabled — data loads on page load only, no live sync");
+    console.log("[REALTIME] Supabase JS client removed — no realtime, no hidden writes possible");
   }, [sessionMode, userEmail]);
 
   // Fix: Update sync indicator after DOM mount (ref may not be attached during initial load)
