@@ -1231,6 +1231,7 @@ function Auswertung({ onBack, ptaParticipants, apoParticipants, apoAssignments, 
   const [hopfEmail, setHopfEmail] = useState(TEAM_HOPF_EMAIL || "");
   const [mediceEmail, setMediceEmail] = useState(TEAM_MEDICE_EMAIL || "");
   const [emailsSet, setEmailsSet] = useState(!!TEAM_HOPF_EMAIL && !!TEAM_MEDICE_EMAIL);
+  const [expandedKey, setExpandedKey] = useState(null);
 
   const loadTeamData = async (hEmail, mEmail) => {
     if (!supabase || !hEmail || !mEmail) return;
@@ -1272,6 +1273,46 @@ function Auswertung({ onBack, ptaParticipants, apoParticipants, apoAssignments, 
   const hopfEvals = hopfData ? (activeTab === "pta" ? hopfData.evals : hopfData.apoEvals) || {} : {};
   const mediceEvals = mediceData ? (activeTab === "pta" ? mediceData.evals : mediceData.apoEvals) || {} : {};
   const assignments = activeTab === "pta" ? tbdAssignments : apoAssignments;
+
+  const downloadAuswertungExcel = () => {
+    const wb = XLSX.utils.book_new();
+    const buildSheet = (tabParticipants, tabAssignments, hEvals, mEvals, tabCriteria, sheetName) => {
+      const critIds = tabCriteria.filter(c => c.id !== "entscheidung");
+      // Headers
+      const headers = ["Name", "Apotheke", "Ort"];
+      critIds.forEach(c => { headers.push("Hopf: " + c.label); headers.push("Medice: " + c.label); });
+      headers.push("Hopf: Entscheidung", "Medice: Entscheidung", "Finale Entscheidung");
+      // Rows
+      const rows = tabParticipants.map(p => {
+        const a = tabAssignments[p.key] || {};
+        const name = a.name || p.name;
+        const pInfo = sheetName.indexOf("Apo") >= 0 ? (APO_PARTICIPANT_INFO[p.key] || {}) : (PARTICIPANT_INFO[p.key] || {});
+        const hE = hEvals[p.key] || {};
+        const mE = mEvals[p.key] || {};
+        const row = [name, pInfo.apotheke || "", pInfo.ort || ""];
+        critIds.forEach(c => {
+          var hV = hE[c.id]; if (hV === true) hV = "Ja"; if (hV === false) hV = "Nein";
+          var mV = mE[c.id]; if (mV === true) mV = "Ja"; if (mV === false) mV = "Nein";
+          row.push(hV || ""); row.push(mV || "");
+        });
+        const hDec = hE.entscheidung === "einladen" ? "Einladen" : hE.entscheidung === "nicht_einladen" ? "Nicht einladen" : "Offen";
+        const mDec = mE.entscheidung === "einladen" ? "Einladen" : mE.entscheidung === "nicht_einladen" ? "Nicht einladen" : "Offen";
+        var finale = "Offen";
+        if (hE.entscheidung && hE.entscheidung === mE.entscheidung) finale = hDec;
+        else if (hE.entscheidung && mE.entscheidung && hE.entscheidung !== mE.entscheidung) finale = "Uneinig";
+        row.push(hDec, mDec, finale);
+        return row;
+      });
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([headers, ...rows]), sheetName);
+    };
+    const ptaHEvals = hopfData ? (hopfData.evals || {}) : {};
+    const ptaMEvals = mediceData ? (mediceData.evals || {}) : {};
+    const apoHEvals = hopfData ? (hopfData.apoEvals || {}) : {};
+    const apoMEvals = mediceData ? (mediceData.apoEvals || {}) : {};
+    buildSheet(ptaParticipants, tbdAssignments, ptaHEvals, ptaMEvals, PTA_CRITERIA, "PTA Think! Auswertung");
+    buildSheet(apoParticipants, apoAssignments, apoHEvals, apoMEvals, APO_CRITERIA, "Apo Think! Auswertung");
+    XLSX.writeFile(wb, "Soundingboard_Auswertung_Final.xlsx");
+  };
 
   const tabStyle = (active) => ({
     flex: 1, padding: "10px 0", borderRadius: 8, border: "none",
@@ -1353,6 +1394,10 @@ function Auswertung({ onBack, ptaParticipants, apoParticipants, apoAssignments, 
                 padding: "4px 12px", borderRadius: 6, border: "1px solid #D1D5DB", background: "#fff",
                 fontFamily: "Trebuchet MS, sans-serif", fontSize: 12, cursor: "pointer", color: "#6B7280"
               }}>E-Mails {"\u00e4"}ndern</button>
+              <button onClick={downloadAuswertungExcel} style={{
+                padding: "5px 14px", borderRadius: 6, border: "none", background: ORANGE, color: "#fff",
+                fontFamily: "Trebuchet MS, sans-serif", fontSize: 12, fontWeight: 600, cursor: "pointer"
+              }}>Excel Auswertung herunterladen</button>
             </div>
 
             {loading ? (
@@ -1431,8 +1476,25 @@ function Auswertung({ onBack, ptaParticipants, apoParticipants, apoAssignments, 
                   var hParts = buildEvalLine(hEval);
                   var mParts = buildEvalLine(mEval);
 
+                  var isExpanded = expandedKey === p.key;
+
+                  // Detail row builder
+                  var buildDetailRow = function(label, hVal, mVal) {
+                    var fmt = function(v) {
+                      if (!v && v !== false) return "\u2013";
+                      if (v === true) return "Ja";
+                      if (v === false) return "Nein";
+                      return String(v);
+                    };
+                    var hF = fmt(hVal), mF = fmt(mVal);
+                    var same = hF === mF && hF !== "\u2013";
+                    var bothEmpty = hF === "\u2013" && mF === "\u2013";
+                    return { label: label, h: hF, m: mF, same: same, bothEmpty: bothEmpty };
+                  };
+
                   return (
-                    <div key={p.key} style={{ display: "grid", gridTemplateColumns: "240px 1fr 1fr 100px", gap: 0, background: i % 2 === 0 ? "#fff" : "#FAFBFC", border: "1px solid #E5E7EB", borderTop: "none" }}>
+                    <React.Fragment key={p.key}>
+                    <div onClick={function() { setExpandedKey(isExpanded ? null : p.key); }} style={{ display: "grid", gridTemplateColumns: "240px 1fr 1fr 100px", gap: 0, background: isExpanded ? "#F0F9FF" : (i % 2 === 0 ? "#fff" : "#FAFBFC"), border: "1px solid #E5E7EB", borderTop: "none", cursor: "pointer", transition: "background 0.15s" }}>
                       {/* Name col */}
                       <div style={{ padding: "8px 12px", display: "flex", alignItems: "center", gap: 8 }}>
                         <div style={{ width: 36, height: 36, borderRadius: "50%", overflow: "hidden", flexShrink: 0, background: "#F3F4F6", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -1444,13 +1506,14 @@ function Auswertung({ onBack, ptaParticipants, apoParticipants, apoAssignments, 
                             {[pInfo.apotheke, pInfo.ort].filter(Boolean).join(", ")}
                           </div>
                         </div>
+                        <span style={{ marginLeft: "auto", fontSize: 10, color: "#9CA3AF" }}>{isExpanded ? "\u25B2" : "\u25BC"}</span>
                       </div>
                       {/* Hopf col */}
                       <div style={{ padding: "6px 10px", borderLeft: "1px solid #E5E7EB" }}>
                         <div style={{ marginBottom: 3 }}>
                           <span style={{ display: "inline-block", padding: "1px 8px", borderRadius: 4, background: hDec.bg, color: hDec.color, fontFamily: "Trebuchet MS, sans-serif", fontSize: 10, fontWeight: 600 }}>{hDec.icon} {hDec.label}</span>
                         </div>
-                        <div style={{ display: "flex", flexWrap: "wrap", gap: "2px 6px" }}>
+                        {!isExpanded && <div style={{ display: "flex", flexWrap: "wrap", gap: "2px 6px" }}>
                           {hParts.map(function(pt) {
                             var isPos = pt.val === "Ja" || pt.val === "Positiv";
                             var isNeg = pt.val === "Nein" || pt.val === "Weniger positiv";
@@ -1462,14 +1525,14 @@ function Auswertung({ onBack, ptaParticipants, apoParticipants, apoAssignments, 
                             );
                           })}
                           {hParts.length === 0 && <span style={{ fontFamily: "Trebuchet MS, sans-serif", fontSize: 9, color: "#D1D5DB" }}>{"\u2013"} keine Bewertung</span>}
-                        </div>
+                        </div>}
                       </div>
                       {/* Medice col */}
                       <div style={{ padding: "6px 10px", borderLeft: "1px solid #E5E7EB" }}>
                         <div style={{ marginBottom: 3 }}>
                           <span style={{ display: "inline-block", padding: "1px 8px", borderRadius: 4, background: mDec.bg, color: mDec.color, fontFamily: "Trebuchet MS, sans-serif", fontSize: 10, fontWeight: 600 }}>{mDec.icon} {mDec.label}</span>
                         </div>
-                        <div style={{ display: "flex", flexWrap: "wrap", gap: "2px 6px" }}>
+                        {!isExpanded && <div style={{ display: "flex", flexWrap: "wrap", gap: "2px 6px" }}>
                           {mParts.map(function(pt) {
                             var isPos = pt.val === "Ja" || pt.val === "Positiv";
                             var isNeg = pt.val === "Nein" || pt.val === "Weniger positiv";
@@ -1481,7 +1544,7 @@ function Auswertung({ onBack, ptaParticipants, apoParticipants, apoAssignments, 
                             );
                           })}
                           {mParts.length === 0 && <span style={{ fontFamily: "Trebuchet MS, sans-serif", fontSize: 9, color: "#D1D5DB" }}>{"\u2013"} keine Bewertung</span>}
-                        </div>
+                        </div>}
                       </div>
                       {/* Finale col */}
                       <div style={{ padding: "8px 6px", borderLeft: "1px solid #E5E7EB", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -1490,6 +1553,53 @@ function Auswertung({ onBack, ptaParticipants, apoParticipants, apoAssignments, 
                         </span>
                       </div>
                     </div>
+                    {/* Expanded detail view */}
+                    {isExpanded && (
+                      <div style={{ border: "1px solid #E5E7EB", borderTop: "none", background: "#F8FAFC", padding: "16px 20px" }}>
+                        <div style={{ display: "grid", gridTemplateColumns: "180px 1fr 1fr", gap: 0, borderRadius: 8, overflow: "hidden", border: "1px solid #E5E7EB" }}>
+                          {/* Header */}
+                          <div style={{ padding: "8px 12px", background: "#F3F4F6", fontFamily: "Trebuchet MS, sans-serif", fontSize: 11, fontWeight: 700, color: "#6B7280" }}>Kriterium</div>
+                          <div style={{ padding: "8px 12px", background: TEAM_HOPF.bg, fontFamily: "Trebuchet MS, sans-serif", fontSize: 11, fontWeight: 700, color: TEAM_HOPF.color, borderLeft: "1px solid #E5E7EB" }}>{TEAM_HOPF.label}</div>
+                          <div style={{ padding: "8px 12px", background: TEAM_MEDICE.bg, fontFamily: "Trebuchet MS, sans-serif", fontSize: 11, fontWeight: 700, color: TEAM_MEDICE.color, borderLeft: "1px solid #E5E7EB" }}>{TEAM_MEDICE.label}</div>
+                          {/* Detail rows */}
+                          {detailCriteria.map(function(c, ci) {
+                            var row = buildDetailRow(c.label, hEval[c.id], mEval[c.id]);
+                            if (row.bothEmpty) return null;
+                            var bgColor = ci % 2 === 0 ? "#fff" : "#FAFBFC";
+                            var valStyle = function(v) {
+                              var color = "#374151";
+                              if (v === "Ja" || v === "Positiv") color = "#059669";
+                              if (v === "Nein" || v === "Weniger positiv") color = "#DC2626";
+                              if (v === "\u2013") color = "#D1D5DB";
+                              return { padding: "6px 12px", fontFamily: "Trebuchet MS, sans-serif", fontSize: 12, color: color, borderLeft: "1px solid #E5E7EB", borderTop: "1px solid #E5E7EB", background: bgColor, wordBreak: "break-word" };
+                            };
+                            return (
+                              <React.Fragment key={c.id}>
+                                <div style={{ padding: "6px 12px", fontFamily: "Trebuchet MS, sans-serif", fontSize: 11, fontWeight: 600, color: "#6B7280", borderTop: "1px solid #E5E7EB", background: bgColor }}>{c.label}</div>
+                                <div style={valStyle(row.h)}>{row.h}</div>
+                                <div style={valStyle(row.m)}>{row.m}</div>
+                              </React.Fragment>
+                            );
+                          })}
+                          {/* Entscheidung row */}
+                          {(function() {
+                            var bgColor = detailCriteria.length % 2 === 0 ? "#fff" : "#FAFBFC";
+                            return (
+                              <React.Fragment>
+                                <div style={{ padding: "8px 12px", fontFamily: "Trebuchet MS, sans-serif", fontSize: 12, fontWeight: 700, color: "#374151", borderTop: "2px solid #E5E7EB", background: "#F9FAFB" }}>Entscheidung</div>
+                                <div style={{ padding: "8px 12px", borderLeft: "1px solid #E5E7EB", borderTop: "2px solid #E5E7EB", background: "#F9FAFB" }}>
+                                  <span style={{ padding: "2px 10px", borderRadius: 4, background: hDec.bg, color: hDec.color, fontFamily: "Trebuchet MS, sans-serif", fontSize: 12, fontWeight: 700 }}>{hDec.icon} {hDec.label}</span>
+                                </div>
+                                <div style={{ padding: "8px 12px", borderLeft: "1px solid #E5E7EB", borderTop: "2px solid #E5E7EB", background: "#F9FAFB" }}>
+                                  <span style={{ padding: "2px 10px", borderRadius: 4, background: mDec.bg, color: mDec.color, fontFamily: "Trebuchet MS, sans-serif", fontSize: 12, fontWeight: 700 }}>{mDec.icon} {mDec.label}</span>
+                                </div>
+                              </React.Fragment>
+                            );
+                          })()}
+                        </div>
+                      </div>
+                    )}
+                    </React.Fragment>
                   );
                 })}
               </div>
