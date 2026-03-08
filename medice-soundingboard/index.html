@@ -43,7 +43,7 @@
   </script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
   <script type="text/babel">
-    const { useState, useCallback, useEffect, useRef } = React;
+    const { useState, useCallback, useEffect, useRef, useMemo } = React;
     const XLSX = window.XLSX;
     const supabase = window.__SUPABASE_CLIENT__;
 
@@ -376,7 +376,7 @@ const TextInput = React.memo(function TextInput({ value, onChange, label }) {
     debounceRef.current = setTimeout(() => {
       latestParentValue.current = val;
       if (onChange) onChange(val);
-    }, 800);
+    }, 300);
   };
   return (
     <div style={{ marginBottom: 16 }}>
@@ -1489,13 +1489,29 @@ function App() {
     tbd1: { name: "Mareike Braach", apotheke: "Schloss Apo", ort: "Siegen", plz: "57072", partner: false, ptaFamily: false, kooperation: "Elac", adm: "Kristina Roth" }
   });
   const [apoAssignments, setApoAssignments] = useState({});
-  const [syncStatus, setSyncStatus] = useState("loading");
+  const syncStatusRef = useRef("loading");
+  const syncIndicatorRef = useRef(null);
   const [sessionMode, setSessionMode] = useState(null); // always "individual"
   const [userEmail, setUserEmail] = useState(null);
-  const skipNextSync = useRef(false);
+  const dataLoadedAt = useRef(0);
   const saveTimer = useRef(null);
   const channelRef = useRef(null);
   const lastSaveTime = useRef(0);
+
+  // Update sync status display WITHOUT causing React re-renders (prevents button flickering)
+  const updateSyncStatus = useCallback((status) => {
+    syncStatusRef.current = status;
+    const el = syncIndicatorRef.current;
+    if (el) {
+      const dot = el.querySelector(".sync-dot");
+      const txt = el.querySelector(".sync-text");
+      const colors = { synced: "#10B981", saving: "#E8A317", error: "#EF4444", loading: "#9CA3AF" };
+      const labels = { synced: "Gespeichert", saving: "Speichert...", error: "Sync-Fehler", loading: "Laden..." };
+      if (dot) dot.style.background = colors[status] || "#9CA3AF";
+      if (txt) txt.textContent = labels[status] || "";
+      el.style.color = status === "error" ? "#EF4444" : "#9CA3AF";
+    }
+  }, []);
 
   const supabaseId = userEmail ? "user_" + userEmail : "main";
 
@@ -1503,7 +1519,8 @@ function App() {
   // --- LOAD: Always load assignments from "main", evals from own row ---
   useEffect(() => {
     if (!supabase || !sessionMode) return;
-    setSyncStatus("loading");
+    updateSyncStatus("loading");
+    dataLoadedAt.current = Date.now();
     const loadData = async () => {
       try {
         // 1) Always load shared assignments from "main"
@@ -1526,9 +1543,9 @@ function App() {
           if (data.data.apoEvals) setApoEvals(data.data.apoEvals);
           if (data.data.program) setProgram(data.data.program);
         }
-        skipNextSync.current = true;
-        setSyncStatus("synced");
-      } catch(e) { console.error("Supabase catch:", e); setSyncStatus("error"); }
+        dataLoadedAt.current = Date.now();
+        updateSyncStatus("synced");
+      } catch(e) { console.error("Supabase catch:", e); updateSyncStatus("error"); }
     };
     loadData();
 
@@ -1547,7 +1564,7 @@ function App() {
           if (d.apoAssignments) setApoAssignments(prev => JSON.stringify(prev) === JSON.stringify(d.apoAssignments) ? prev : d.apoAssignments);
           if (d.apoParticipants && d.apoParticipants.length > 0) setApoParticipants(prev => JSON.stringify(prev) === JSON.stringify(d.apoParticipants) ? prev : d.apoParticipants);
           if (d.ptaParticipants && d.ptaParticipants.length > 0) setPtaParticipants(prev => JSON.stringify(prev) === JSON.stringify(d.ptaParticipants) ? prev : d.ptaParticipants);
-          setSyncStatus("synced");
+          updateSyncStatus("synced");
         })
         .subscribe();
       channels.push(mainChannel);
@@ -1561,7 +1578,7 @@ function App() {
             if (Date.now() - lastSaveTime.current < 5000) return;
             if (d.evals) setEvals(prev => JSON.stringify(prev) === JSON.stringify(d.evals) ? prev : d.evals);
             if (d.apoEvals) setApoEvals(prev => JSON.stringify(prev) === JSON.stringify(d.apoEvals) ? prev : d.apoEvals);
-            setSyncStatus("synced");
+            updateSyncStatus("synced");
           })
           .subscribe();
         channels.push(userChannel);
@@ -1573,15 +1590,21 @@ function App() {
   }, [sessionMode, userEmail]);
 
   // --- SAVE: Assignments always to "main", evals to own row ---
-  const skipAssignmentSync = useRef(false);
   const pendingDataRef = useRef(null);
   const isSaving = useRef(false);
+  const doSaveRef = useRef(null);
 
-  // Core save function (reusable for debounced + flush)
+  // Core save function — handles concurrent saves via retry
   const doSave = useCallback(async (saveData) => {
-    if (!supabase || !sessionMode || isSaving.current) return;
+    if (!supabase || !sessionMode) return;
+    // If already saving, queue this data and return — it will be picked up after current save
+    if (isSaving.current) {
+      console.log("[doSave] Already saving, queuing data for retry");
+      pendingDataRef.current = saveData;
+      return;
+    }
     isSaving.current = true;
-    setSyncStatus("saving");
+    updateSyncStatus("saving");
     lastSaveTime.current = Date.now();
     try {
       const { _evals, _apoEvals, _program, _userEmail, _tbdAssignments, _apoAssignments, _apoParticipants, _ptaParticipants, _supabaseId } = saveData;
@@ -1599,37 +1622,91 @@ function App() {
 
       // 2) Save evals to own row
       const userSave = { evals: _evals, apoEvals: _apoEvals, program: _program, userEmail: _userEmail };
-      console.log("[doSave] Saving evals keys:", Object.keys(_evals || {}), "karin zusatzinfo:", (_evals?.karin_heisler?.zusatzinfo || "EMPTY"));
+      console.log("[doSave] Saving evals to", _supabaseId);
       const { error: userErr } = await supabase.from("soundingboard").upsert({
         id: _supabaseId, data: userSave, updated_at: new Date().toISOString()
       });
       console.log("Save user (" + _supabaseId + "):", userErr ? "ERROR: " + userErr.message : "OK");
-      setSyncStatus(mainErr || userErr ? "error" : "synced");
-    } catch(e) { console.error("Save catch:", e); setSyncStatus("error"); }
-    finally { isSaving.current = false; pendingDataRef.current = null; }
-  }, [supabase, sessionMode]);
+      updateSyncStatus(mainErr || userErr ? "error" : "synced");
+    } catch(e) { console.error("Save catch:", e); updateSyncStatus("error"); }
+    finally {
+      isSaving.current = false;
+      // CRITICAL: If more data came in while we were saving, save it now
+      const queued = pendingDataRef.current;
+      if (queued) {
+        pendingDataRef.current = null;
+        console.log("[doSave] Retrying queued save...");
+        setTimeout(() => doSaveRef.current(queued), 50);
+      }
+    }
+  }, [supabase, sessionMode, updateSyncStatus]);
+  doSaveRef.current = doSave;
 
-  // Debounced save effect
+  // Debounced save effect — uses dataLoadedAt instead of fragile skipNextSync
   useEffect(() => {
-    if (!supabase || !sessionMode || syncStatus === "loading") return;
-    if (skipNextSync.current) { skipNextSync.current = false; console.log("[SAVE] Skipped (skipNextSync)"); return; }
+    if (!supabase || !sessionMode) return;
+    if (syncStatusRef.current === "loading") return;
+    // Don't save within 1.5s of loading data (prevents saving loaded data right back)
+    if (Date.now() - dataLoadedAt.current < 1500) {
+      console.log("[SAVE] Skipped (within 1.5s of load)");
+      return;
+    }
     if (saveTimer.current) clearTimeout(saveTimer.current);
     const saveData = { _evals: evals, _apoEvals: apoEvals, _program: program, _userEmail: userEmail, _tbdAssignments: tbdAssignments, _apoAssignments: apoAssignments, _apoParticipants: apoParticipants, _ptaParticipants: ptaParticipants, _supabaseId: supabaseId };
     pendingDataRef.current = saveData;
-    console.log("[SAVE] Debounce started (500ms)...");
+    console.log("[SAVE] Debounce started (200ms)...");
     saveTimer.current = setTimeout(() => {
       console.log("[SAVE] Debounce fired, calling doSave");
+      pendingDataRef.current = null;
       doSave(saveData);
-    }, 500);
+    }, 200);
   }, [evals, apoEvals, program, tbdAssignments, apoAssignments, apoParticipants, ptaParticipants]);
 
   // Flush pending save immediately (used before navigation)
   const flushSave = useCallback(async () => {
     if (saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null; }
-    if (pendingDataRef.current) {
-      await doSave(pendingDataRef.current);
+    const data = pendingDataRef.current;
+    pendingDataRef.current = null;
+    if (data) {
+      await doSave(data);
     }
   }, [doSave]);
+
+  // beforeunload + visibilitychange: save data even if page is closing
+  useEffect(() => {
+    const SUPA_URL = "https://osjevsltrfcvflhxrvgc.supabase.co";
+    const SUPA_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9zamV2c2x0cmZjdmZsaHhydmdjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2MTcyODAsImV4cCI6MjA4ODE5MzI4MH0.NZFyz81Kh9kPfBx6suAbHSCrym-ruCfH8u32riAj51I";
+    const handleUnload = () => {
+      // Blur active textarea to flush TextInput debounce
+      if (document.activeElement && document.activeElement.tagName === "TEXTAREA") {
+        document.activeElement.blur();
+      }
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+      const sd = pendingDataRef.current;
+      if (sd && sd._supabaseId) {
+        // Use fetch with keepalive to survive page unload
+        const userSave = { evals: sd._evals, apoEvals: sd._apoEvals, program: sd._program, userEmail: sd._userEmail };
+        try {
+          fetch(SUPA_URL + "/rest/v1/soundingboard?id=eq." + encodeURIComponent(sd._supabaseId), {
+            method: "PATCH",
+            headers: { "apikey": SUPA_KEY, "Authorization": "Bearer " + SUPA_KEY, "Content-Type": "application/json", "Prefer": "return=minimal" },
+            body: JSON.stringify({ data: userSave, updated_at: new Date().toISOString() }),
+            keepalive: true
+          });
+        } catch(e) { console.error("Unload save error:", e); }
+        pendingDataRef.current = null;
+      }
+    };
+    const handleVisibility = () => {
+      if (document.visibilityState === "hidden") handleUnload();
+    };
+    window.addEventListener("beforeunload", handleUnload);
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => {
+      window.removeEventListener("beforeunload", handleUnload);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, []);
 
   const currentParticipants = program === "apo" ? apoParticipants : ptaParticipants;
   const currentEvals = program === "apo" ? apoEvals : evals;
@@ -1641,7 +1718,8 @@ function App() {
   const isApoSlot = program === "apo"; // All apo slots are assignable
 
   const p = currentParticipants[idx] || currentParticipants[0];
-  const ev = currentEvals[p.key] || {};
+  const EMPTY_EVAL = useMemo(() => ({}), []);
+  const ev = currentEvals[p.key] || EMPTY_EVAL;
   const done = currentParticipants.filter(x => currentEvals[x.key]?.entscheidung).length;
 
   // Pre-fill partnerprogramm and pta_family from known data when first visiting a participant
@@ -1776,9 +1854,9 @@ function App() {
               {userEmail}
             </span>
           )}
-          <div style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, color: syncStatus === "error" ? "#EF4444" : "#9CA3AF" }} title={syncStatus === "synced" ? "Gespeichert" : syncStatus === "saving" ? "Speichert..." : syncStatus === "error" ? "Sync-Fehler" : "Laden..."}>
-            <span style={{ width: 8, height: 8, borderRadius: "50%", background: syncStatus === "synced" ? "#10B981" : syncStatus === "saving" ? ORANGE : syncStatus === "error" ? "#EF4444" : "#9CA3AF" }}></span>
-            {syncStatus === "synced" ? "Gespeichert" : syncStatus === "saving" ? "Speichert..." : syncStatus === "error" ? "Sync-Fehler" : "Laden..."}
+          <div ref={syncIndicatorRef} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, color: "#9CA3AF" }}>
+            <span className="sync-dot" style={{ width: 8, height: 8, borderRadius: "50%", background: "#9CA3AF", display: "inline-block" }}></span>
+            <span className="sync-text">Laden...</span>
           </div>
           <button onClick={() => setView(view === "eval" ? "summary" : "eval")} style={{
             padding: "7px 16px", borderRadius: 6, border: "1.5px solid " + PETROL,
