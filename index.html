@@ -1638,13 +1638,20 @@ function App() {
             "apikey": SUPA_KEY,
             "Authorization": "Bearer " + SUPA_KEY,
             "Content-Type": "application/json",
-            "Prefer": "return=minimal"
+            "Prefer": "return=representation"
           },
           body: patchBody
         });
         if (!resp.ok) {
           const errText = await resp.text();
           userErr = { message: "PATCH " + resp.status + ": " + errText };
+        } else {
+          // Log what the server actually wrote
+          try {
+            const written = await resp.json();
+            const wKh = written[0]?.data?.evals?.karin_heisler || {};
+            console.log("[doSave] SERVER WROTE: rows=" + written.length + " kh.zusatzinfo=" + (wKh.zusatzinfo || "MISSING") + " updated_at=" + written[0]?.updated_at);
+          } catch(e) { console.log("[doSave] Could not parse response:", e.message); }
         }
       } catch(fetchErr) {
         userErr = { message: "fetch error: " + fetchErr.message };
