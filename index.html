@@ -1554,6 +1554,10 @@ function App() {
       const SUPA_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9zamV2c2x0cmZjdmZsaHhydmdjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2MTcyODAsImV4cCI6MjA4ODE5MzI4MH0.NZFyz81Kh9kPfBx6suAbHSCrym-ruCfH8u32riAj51I";
       const hdrs = { "apikey": SUPA_KEY, "Authorization": "Bearer " + SUPA_KEY };
       try {
+        // Reset state before loading to prevent stale data from previous user
+        setEvals({});
+        setApoEvals({});
+
         // 1) Load user row first (contains evals + assignments since main-PATCH fix)
         console.log("[LOAD] Loading user data from '" + supabaseId + "' via direct fetch...");
         const userResp = await fetch(SUPA_URL + "/rest/v1/soundingboard?id=eq." + encodeURIComponent(supabaseId) + "&select=data", { headers: hdrs });
@@ -1901,7 +1905,7 @@ function App() {
             <span className="sync-dot" style={{ width: 8, height: 8, borderRadius: "50%", background: "#9CA3AF", display: "inline-block" }}></span>
             <span className="sync-text">Laden...</span>
           </div>
-          <button onClick={async () => { await handleManualSave(); setSessionMode(null); setUserEmail(null); setView("password"); }} style={{
+          <button onClick={async () => { await handleManualSave(); setEvals({}); setApoEvals({}); setProgram(null); setIdx(0); setSessionMode(null); setUserEmail(null); setView("password"); }} style={{
             padding: "4px 10px", borderRadius: 5, border: "1px solid #EF444440",
             background: "#fff", color: "#EF4444", fontFamily: "Trebuchet MS, sans-serif",
             fontSize: 11, fontWeight: 600, cursor: "pointer"
