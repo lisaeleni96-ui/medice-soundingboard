@@ -1163,16 +1163,6 @@ function Summary({ participants, evaluations, tbdAssignments, participantInfo, p
             </div>
           )}
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          <button onClick={downloadExcel} style={{ padding: "8px 18px", borderRadius: 6, border: "none", background: ORANGE, color: "#fff", fontFamily: "Trebuchet MS, sans-serif", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
-            Excel herunterladen
-          </button>
-          {program === "apo" && allEvals && (
-            <button onClick={downloadCombinedExcel} style={{ padding: "8px 18px", borderRadius: 6, border: "1.5px solid " + PETROL, background: "#fff", color: PETROL, fontFamily: "Trebuchet MS, sans-serif", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
-              Gesamt-Excel (beide)
-            </button>
-          )}
-        </div>
       </div>
 
       {/* PTA: Weiter zu Apo Think */}
@@ -2140,18 +2130,11 @@ function App() {
                     fontFamily: "Trebuchet MS, sans-serif", fontSize: 14, fontWeight: 600,
                     cursor: idx === 0 ? "default" : "pointer", opacity: idx === 0 ? 0.4 : 1
                   }}>{"\u2190"} Zur{"\u00fc"}ck</button>
-                  <div style={{ display: "flex", gap: 8 }}>
-                    <button onClick={downloadExcelGlobal} style={{
-                      padding: "10px 16px", borderRadius: 6, border: "1.5px solid " + PETROL,
-                      background: "#fff", color: PETROL,
-                      fontFamily: "Trebuchet MS, sans-serif", fontSize: 13, fontWeight: 600, cursor: "pointer"
-                    }}>Excel</button>
-                    <button onClick={async () => { await handleManualSave(); setView("summary"); }} style={{
-                      padding: "10px 16px", borderRadius: 6, border: "none",
-                      background: ORANGE, color: "#fff",
-                      fontFamily: "Trebuchet MS, sans-serif", fontSize: 13, fontWeight: 600, cursor: "pointer"
-                    }}>{"\u2713"} Fertig</button>
-                  </div>
+                  <button onClick={async () => { await handleManualSave(); setView("summary"); }} style={{
+                    padding: "10px 16px", borderRadius: 6, border: "none",
+                    background: ORANGE, color: "#fff",
+                    fontFamily: "Trebuchet MS, sans-serif", fontSize: 13, fontWeight: 600, cursor: "pointer"
+                  }}>{"\u2713"} Fertig</button>
                   <button onClick={async () => { if (idx < currentParticipants.length - 1) { await handleManualSave(); setIdx(idx + 1); } }}
                     disabled={idx === currentParticipants.length - 1} style={{
                     padding: "10px 22px", borderRadius: 8, border: "none",
