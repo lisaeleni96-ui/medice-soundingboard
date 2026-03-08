@@ -98,8 +98,8 @@ const PTA_CRITERIA = [
   { id: "begruendung", label: "Begr\u00fcndung", type: "text" },
   { id: "partnerprogramm", label: "Teil einer Partnerprogrammapotheke?", type: "yesno", readonly: true },
   { id: "pta_family", label: "Teil PTA Family?", type: "yesno", readonly: true },
-  { id: "expertenzirkel", label: "Teilnahme am Perenterol Expertenzirkel?", type: "yesno" },
-  { id: "einkauf", label: "Zust\u00e4ndig f\u00fcr Einkauf?", type: "yesno" },
+  { id: "expertenzirkel", label: "Teilnahme am Perenterol Expertenzirkel?", type: "yesnodk" },
+  { id: "einkauf", label: "Zust\u00e4ndig f\u00fcr Einkauf?", type: "yesnodk" },
   { id: "rolle", label: "Besondere Rolle in der Apotheke?", type: "text" },
   { id: "zusatzinfo", label: "Zusatzinfo", type: "text" },
   { id: "entscheidung", label: "Entscheidung", type: "decision" },
@@ -109,7 +109,7 @@ const APO_CRITERIA = [
   { id: "aufgefallen", label: "Ist uns aufgefallen?", type: "yesno" },
   { id: "wie_aufgefallen", label: "Wenn aufgefallen?", type: "posneg" },
   { id: "begruendung", label: "Begr\u00fcndung", type: "text" },
-  { id: "expertenzirkel", label: "Teilnahme am Perenterol Expertenzirkel?", type: "yesno" },
+  { id: "expertenzirkel", label: "Teilnahme am Perenterol Expertenzirkel?", type: "yesnodk" },
   { id: "partnerprogramm", label: "Teil des Partnerprogramms?", type: "yesno", readonly: true },
   { id: "zusatzinfo", label: "Zusatzinfo", type: "text" },
   { id: "entscheidung", label: "Entscheidung", type: "decision" },
@@ -290,20 +290,45 @@ const YesNo = React.memo(function YesNo({ value, onChange, label, disabled }) {
   );
 });
 
+const YesNoDk = React.memo(function YesNoDk({ value, onChange, label }) {
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <div style={{ fontFamily: "Trebuchet MS, sans-serif", fontSize: 13, fontWeight: 600, color: BLACK, marginBottom: 6 }}>
+        {label}
+      </div>
+      <div style={{ display: "flex", gap: 8 }}>
+        {["Ja", "Nein", "Wei\u00df nicht"].map(o => (
+          <button key={o} onClick={() => onChange(o)} style={{
+            padding: "6px 22px", borderRadius: 6, border: "1.5px solid",
+            borderColor: value === o ? PETROL : "#D1D5DB",
+            background: value === o ? PETROL : "#fff",
+            color: value === o ? "#fff" : BLACK,
+            fontFamily: "Trebuchet MS, sans-serif", fontSize: 13, fontWeight: value === o ? 600 : 400,
+            cursor: "pointer"
+          }}>{o}</button>
+        ))}
+      </div>
+    </div>
+  );
+});
+
 const PosNeg = React.memo(function PosNeg({ value, onChange, label }) {
   return (
     <div style={{ marginBottom: 16 }}>
       <div style={{ fontFamily: "Trebuchet MS, sans-serif", fontSize: 13, fontWeight: 600, color: BLACK, marginBottom: 6 }}>{label}</div>
       <div style={{ display: "flex", gap: 8 }}>
-        {["Positiv", "Weniger positiv"].map(o => (
-          <button key={o} onClick={() => onChange(o)} style={{
-            padding: "6px 16px", borderRadius: 6, border: "1.5px solid",
-            borderColor: value === o ? (o === "Positiv" ? "#10B981" : ORANGE) : "#D1D5DB",
-            background: value === o ? (o === "Positiv" ? "#10B981" : ORANGE) : "#fff",
-            color: value === o ? "#fff" : BLACK,
-            fontFamily: "Trebuchet MS, sans-serif", fontSize: 13, fontWeight: value === o ? 600 : 400, cursor: "pointer"
-          }}>{o}</button>
-        ))}
+        {["Positiv", "Weder noch", "Weniger positiv"].map(o => {
+          const col = o === "Positiv" ? "#10B981" : o === "Weniger positiv" ? ORANGE : "#6B7280";
+          return (
+            <button key={o} onClick={() => onChange(o)} style={{
+              padding: "6px 16px", borderRadius: 6, border: "1.5px solid",
+              borderColor: value === o ? col : "#D1D5DB",
+              background: value === o ? col : "#fff",
+              color: value === o ? "#fff" : BLACK,
+              fontFamily: "Trebuchet MS, sans-serif", fontSize: 13, fontWeight: value === o ? 600 : 400, cursor: "pointer"
+            }}>{o}</button>
+          );
+        })}
       </div>
     </div>
   );
@@ -425,6 +450,7 @@ const EvalForm = React.memo(function EvalForm({ evaluation, onUpdate, criteria }
     <div>
       {fields.map(c => {
         if (c.type === "yesno") return <YesNo key={c.id} label={c.label} value={ev[c.id]} onChange={getButtonCb(c.id)} disabled={c.readonly} />;
+        if (c.type === "yesnodk") return <YesNoDk key={c.id} label={c.label} value={ev[c.id]} onChange={getButtonCb(c.id)} />;
         if (c.type === "posneg") return <PosNeg key={c.id} label={c.label} value={ev[c.id]} onChange={getButtonCb(c.id)} />;
         if (c.type === "text") return <TextInput key={c.id} label={c.label} value={ev[c.id]} onChange={getTextCb(c.id)} />;
         if (c.type === "dreistufig") return <Dreistufig key={c.id} label={c.label} value={ev[c.id]} onChange={getButtonCb(c.id)} />;
