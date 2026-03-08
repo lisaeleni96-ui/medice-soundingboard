@@ -381,7 +381,7 @@ const TextInput = React.memo(function TextInput({ value, onChange, label }) {
       <textarea value={localValue} onChange={handleChange} rows={2} placeholder="Hier eingeben..."
         style={{ width: "100%", padding: "8px 12px", borderRadius: 6, border: "1.5px solid #D1D5DB", fontFamily: "Trebuchet MS, sans-serif", fontSize: 13, resize: "vertical", outline: "none", boxSizing: "border-box" }}
         onFocus={e => { e.target.style.borderColor = PETROL; isFocused.current = true; }}
-        onBlur={e => { e.target.style.borderColor = "#D1D5DB"; isFocused.current = false; latestParentValue.current = localValue; console.log("[TextInput] onBlur →", label, "value:", localValue); if (onChange) onChange(localValue); }} />
+        onBlur={e => { e.target.style.borderColor = "#D1D5DB"; isFocused.current = false; latestParentValue.current = localValue; }} />
     </div>
   );
 });
@@ -1642,50 +1642,55 @@ function App() {
   }, [supabase, sessionMode, updateSyncStatus]);
   doSaveRef.current = doSave;
 
-  // Debounced save effect — uses dataLoadedAt instead of fragile skipNextSync
+  // --- MANUAL SAVE: User clicks "Speichern" button ---
+  // No more auto-save on every keystroke — this avoids race conditions with visibility/unload handlers
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [saveButtonFlash, setSaveButtonFlash] = useState("");
+
+  // Track when data changes (after initial load)
   useEffect(() => {
     if (!supabase || !sessionMode) return;
     if (syncStatusRef.current === "loading") return;
-    // Don't save within 1.5s of loading data (prevents saving loaded data right back)
-    if (Date.now() - dataLoadedAt.current < 1500) {
-      console.log("[SAVE] Skipped (within 1.5s of load)");
-      return;
-    }
-    if (saveTimer.current) clearTimeout(saveTimer.current);
-    const saveData = { _evals: evals, _apoEvals: apoEvals, _program: program, _userEmail: userEmail, _tbdAssignments: tbdAssignments, _apoAssignments: apoAssignments, _apoParticipants: apoParticipants, _ptaParticipants: ptaParticipants, _supabaseId: supabaseId };
-    pendingDataRef.current = saveData;
-    const khSnap = evals && evals["karin_heisler"];
-    console.log("[SAVE] Debounce started (200ms)... karin_heisler.zusatzinfo:", khSnap ? khSnap.zusatzinfo : "N/A", "keys:", khSnap ? Object.keys(khSnap).join(",") : "NONE");
-    saveTimer.current = setTimeout(() => {
-      console.log("[SAVE] Debounce fired, calling doSave");
-      pendingDataRef.current = null;
-      doSave(saveData);
-    }, 200);
+    if (Date.now() - dataLoadedAt.current < 1500) return;
+    setHasUnsavedChanges(true);
+    // Update pendingDataRef for beforeunload safety net
+    pendingDataRef.current = { _evals: evals, _apoEvals: apoEvals, _program: program, _userEmail: userEmail, _tbdAssignments: tbdAssignments, _apoAssignments: apoAssignments, _apoParticipants: apoParticipants, _ptaParticipants: ptaParticipants, _supabaseId: supabaseId };
   }, [evals, apoEvals, program, tbdAssignments, apoAssignments, apoParticipants, ptaParticipants]);
 
-  // Flush pending save immediately (used before navigation)
-  const flushSave = useCallback(async () => {
-    if (saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null; }
-    const data = pendingDataRef.current;
+  // Manual save function — called by "Speichern" button
+  const handleManualSave = useCallback(async () => {
+    if (!supabase || !sessionMode) return;
+    const saveData = { _evals: evals, _apoEvals: apoEvals, _program: program, _userEmail: userEmail, _tbdAssignments: tbdAssignments, _apoAssignments: apoAssignments, _apoParticipants: apoParticipants, _ptaParticipants: ptaParticipants, _supabaseId: supabaseId };
+    // Blur active field to capture latest value
+    if (document.activeElement && document.activeElement.tagName === "TEXTAREA") {
+      document.activeElement.blur();
+    }
+    await doSave(saveData);
     pendingDataRef.current = null;
-    if (data) {
-      await doSave(data);
+    setHasUnsavedChanges(false);
+    setSaveButtonFlash("saved");
+    setTimeout(() => setSaveButtonFlash(""), 2000);
+  }, [evals, apoEvals, program, userEmail, tbdAssignments, apoAssignments, apoParticipants, ptaParticipants, supabaseId, doSave, supabase, sessionMode]);
+
+  // Flush pending save immediately (used before navigation between screens)
+  const flushSave = useCallback(async () => {
+    if (pendingDataRef.current) {
+      console.log("[flushSave] Saving unsaved data before navigation");
+      await doSave(pendingDataRef.current);
+      pendingDataRef.current = null;
+      setHasUnsavedChanges(false);
     }
   }, [doSave]);
 
-  // beforeunload + visibilitychange: save data even if page is closing
+  // beforeunload ONLY: save unsaved data when page is actually closing
+  // REMOVED visibilitychange handler — it was causing stale data overwrites
   useEffect(() => {
     const SUPA_URL = "https://osjevsltrfcvflhxrvgc.supabase.co";
     const SUPA_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9zamV2c2x0cmZjdmZsaHhydmdjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2MTcyODAsImV4cCI6MjA4ODE5MzI4MH0.NZFyz81Kh9kPfBx6suAbHSCrym-ruCfH8u32riAj51I";
     const handleUnload = () => {
-      // Blur active textarea to flush TextInput debounce
-      if (document.activeElement && document.activeElement.tagName === "TEXTAREA") {
-        document.activeElement.blur();
-      }
-      if (saveTimer.current) clearTimeout(saveTimer.current);
       const sd = pendingDataRef.current;
       if (sd && sd._supabaseId) {
-        // Use fetch with keepalive to survive page unload
+        console.log("[UNLOAD] Saving unsaved changes via keepalive fetch");
         const userSave = { evals: sd._evals, apoEvals: sd._apoEvals, program: sd._program, userEmail: sd._userEmail };
         try {
           fetch(SUPA_URL + "/rest/v1/soundingboard?id=eq." + encodeURIComponent(sd._supabaseId), {
@@ -1696,16 +1701,13 @@ function App() {
           });
         } catch(e) { console.error("Unload save error:", e); }
         pendingDataRef.current = null;
+      } else {
+        console.log("[UNLOAD] No unsaved changes, skipping save");
       }
     };
-    const handleVisibility = () => {
-      if (document.visibilityState === "hidden") handleUnload();
-    };
     window.addEventListener("beforeunload", handleUnload);
-    document.addEventListener("visibilitychange", handleVisibility);
     return () => {
       window.removeEventListener("beforeunload", handleUnload);
-      document.removeEventListener("visibilitychange", handleVisibility);
     };
   }, []);
 
@@ -1863,12 +1865,6 @@ function App() {
             <span className="sync-dot" style={{ width: 8, height: 8, borderRadius: "50%", background: "#9CA3AF", display: "inline-block" }}></span>
             <span className="sync-text">Laden...</span>
           </div>
-          <button onClick={() => setView(view === "eval" ? "summary" : "eval")} style={{
-            padding: "7px 16px", borderRadius: 6, border: "1.5px solid " + PETROL,
-            background: view === "summary" ? PETROL : "#fff",
-            color: view === "summary" ? "#fff" : PETROL,
-            fontFamily: "Trebuchet MS, sans-serif", fontSize: 13, fontWeight: 600, cursor: "pointer"
-          }}>{view === "summary" ? "\u2190 Zur\u00fcck" : "\u2713 Fertig"}</button>
           <button onClick={() => setView("auswertung")} style={{
             padding: "7px 16px", borderRadius: 6, border: "1.5px solid #D97706",
             background: "#FEF3C7", color: "#D97706",
@@ -2015,26 +2011,40 @@ function App() {
               </div>
 
               {/* Navigation */}
-              {/* Navigation */}
+              {/* Navigation — Weiter/Zurück speichern automatisch */}
               <div style={{ display: "flex", justifyContent: "space-between", marginTop: 20 }}>
-                <button onClick={() => { if (idx > 0) { document.activeElement && document.activeElement.blur(); setIdx(idx - 1); } }} disabled={idx === 0} style={{
+                <button onClick={async () => { if (idx > 0) { await handleManualSave(); setIdx(idx - 1); } }} disabled={idx === 0} style={{
                   padding: "10px 22px", borderRadius: 6, border: "1.5px solid #D1D5DB",
                   background: "#fff", color: idx === 0 ? "#D1D5DB" : BLACK,
                   fontFamily: "Trebuchet MS, sans-serif", fontSize: 14, fontWeight: 600,
                   cursor: idx === 0 ? "default" : "pointer", opacity: idx === 0 ? 0.4 : 1
                 }}>{"\u2190"} Zur{"\u00fc"}ck</button>
-                <button onClick={() => { if (idx < currentParticipants.length - 1) { document.activeElement && document.activeElement.blur(); setIdx(idx + 1); } }}
+                <button onClick={async () => { if (idx < currentParticipants.length - 1) { await handleManualSave(); setIdx(idx + 1); } }}
                   disabled={idx === currentParticipants.length - 1} style={{
-                  padding: "10px 22px", borderRadius: 6, border: "none",
+                  padding: "10px 22px", borderRadius: 8, border: "none",
                   background: idx === currentParticipants.length - 1 ? "#D1D5DB" : (program === "apo" ? ORANGE : PETROL), color: "#fff",
-                  fontFamily: "Trebuchet MS, sans-serif", fontSize: 14, fontWeight: 600,
+                  fontFamily: "Trebuchet MS, sans-serif", fontSize: 15, fontWeight: 700,
                   cursor: idx === currentParticipants.length - 1 ? "default" : "pointer",
                   opacity: idx === currentParticipants.length - 1 ? 0.4 : 1
-                }}>Weiter {"\u2192"}</button>
+                }}>Weiter & Speichern {"\u2192"}</button>
+              </div>
+
+              {/* Nur Speichern (ohne Navigation) */}
+              <div style={{ marginTop: 10 }}>
+                <button onClick={handleManualSave} style={{
+                  width: "100%", padding: "10px 16px", borderRadius: 6,
+                  border: saveButtonFlash === "saved" ? "2px solid #10B981" : hasUnsavedChanges ? "2px solid #EF4444" : "1.5px solid #D1D5DB",
+                  background: saveButtonFlash === "saved" ? "#ECFDF5" : hasUnsavedChanges ? "#FEF2F2" : "#fff",
+                  color: saveButtonFlash === "saved" ? "#059669" : hasUnsavedChanges ? "#DC2626" : "#6B7280",
+                  fontFamily: "Trebuchet MS, sans-serif", fontSize: 13, fontWeight: 600, cursor: "pointer",
+                  transition: "all 0.3s ease"
+                }}>
+                  {saveButtonFlash === "saved" ? "\u2713 Gespeichert!" : hasUnsavedChanges ? "\u26A0 Speichern" : "\uD83D\uDCBE Speichern"}
+                </button>
               </div>
 
               {/* Excel + Zusammenfassung Buttons */}
-              <div style={{ display: "flex", gap: 10, marginTop: 16, paddingBottom: 24 }}>
+              <div style={{ display: "flex", gap: 10, marginTop: 10, paddingBottom: 24 }}>
                 <button onClick={downloadExcelGlobal} style={{
                   flex: 1, padding: "12px 16px", borderRadius: 8, border: "1.5px solid " + PETROL,
                   background: "#fff", color: PETROL,
