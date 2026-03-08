@@ -359,20 +359,32 @@ const Dreistufig = React.memo(function Dreistufig({ value, onChange, label }) {
 const TextInput = React.memo(function TextInput({ value, onChange, label }) {
   const [localValue, setLocalValue] = useState(value || "");
   const latestParentValue = useRef(value);
-  // Only sync from parent if the parent value genuinely changed (e.g. loaded from DB)
+  const isFocused = useRef(false);
+  const debounceRef = useRef(null);
+  // Only sync from parent if genuinely changed AND user is NOT currently editing
   useEffect(() => {
-    if (value !== latestParentValue.current) {
+    if (value !== latestParentValue.current && !isFocused.current) {
       setLocalValue(value || "");
       latestParentValue.current = value;
     }
   }, [value]);
+  // Debounced onChange: propagate to parent while typing (every 800ms)
+  const handleChange = (e) => {
+    const val = e.target.value;
+    setLocalValue(val);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      latestParentValue.current = val;
+      if (onChange) onChange(val);
+    }, 800);
+  };
   return (
     <div style={{ marginBottom: 16 }}>
       <div style={{ fontFamily: "Trebuchet MS, sans-serif", fontSize: 13, fontWeight: 600, color: BLACK, marginBottom: 6 }}>{label}</div>
-      <textarea value={localValue} onChange={e => setLocalValue(e.target.value)} rows={2} placeholder="Hier eingeben..."
+      <textarea value={localValue} onChange={handleChange} rows={2} placeholder="Hier eingeben..."
         style={{ width: "100%", padding: "8px 12px", borderRadius: 6, border: "1.5px solid #D1D5DB", fontFamily: "Trebuchet MS, sans-serif", fontSize: 13, resize: "vertical", outline: "none", boxSizing: "border-box" }}
-        onFocus={e => { e.target.style.borderColor = PETROL; }}
-        onBlur={e => { e.target.style.borderColor = "#D1D5DB"; latestParentValue.current = localValue; if (onChange) onChange(localValue); }} />
+        onFocus={e => { e.target.style.borderColor = PETROL; isFocused.current = true; }}
+        onBlur={e => { e.target.style.borderColor = "#D1D5DB"; isFocused.current = false; latestParentValue.current = localValue; if (debounceRef.current) clearTimeout(debounceRef.current); if (onChange) onChange(localValue); }} />
     </div>
   );
 });
@@ -402,30 +414,45 @@ const Decision = React.memo(function Decision({ value, onChange }) {
 });
 
 const EvalForm = React.memo(function EvalForm({ evaluation, onUpdate, criteria }) {
-  // No local state needed - button inputs update parent directly,
-  // TextInput manages its own local state and syncs on blur
   const ev = evaluation || {};
+  const evRef = useRef(ev);
+  evRef.current = ev;
 
+  // Stable callbacks: use ref so they never change identity → children never re-render unnecessarily
   const handleButtonChange = useCallback((fieldId, value) => {
-    onUpdate({ ...ev, [fieldId]: value });
-  }, [ev, onUpdate]);
+    onUpdate({ ...evRef.current, [fieldId]: value });
+  }, [onUpdate]);
 
-  // TextInput calls this on blur with its local value
-  const handleTextBlur = useCallback((fieldId, value) => {
-    if (ev[fieldId] !== value) {
-      onUpdate({ ...ev, [fieldId]: value });
+  const handleTextChange = useCallback((fieldId, value) => {
+    if (evRef.current[fieldId] !== value) {
+      onUpdate({ ...evRef.current, [fieldId]: value });
     }
-  }, [ev, onUpdate]);
+  }, [onUpdate]);
+
+  // Stable per-field callbacks (memoized by field id)
+  const callbackCache = useRef({});
+  const getButtonCb = useCallback((fieldId) => {
+    if (!callbackCache.current["btn_" + fieldId]) {
+      callbackCache.current["btn_" + fieldId] = (v) => handleButtonChange(fieldId, v);
+    }
+    return callbackCache.current["btn_" + fieldId];
+  }, [handleButtonChange]);
+  const getTextCb = useCallback((fieldId) => {
+    if (!callbackCache.current["txt_" + fieldId]) {
+      callbackCache.current["txt_" + fieldId] = (v) => handleTextChange(fieldId, v);
+    }
+    return callbackCache.current["txt_" + fieldId];
+  }, [handleTextChange]);
 
   const fields = criteria || PTA_CRITERIA;
   return (
     <div>
       {fields.map(c => {
-        if (c.type === "yesno") return <YesNo key={c.id} label={c.label} value={ev[c.id]} onChange={v => handleButtonChange(c.id, v)} disabled={c.readonly} />;
-        if (c.type === "posneg") return <PosNeg key={c.id} label={c.label} value={ev[c.id]} onChange={v => handleButtonChange(c.id, v)} />;
-        if (c.type === "text") return <TextInput key={c.id} label={c.label} value={ev[c.id]} onChange={v => handleTextBlur(c.id, v)} />;
-        if (c.type === "dreistufig") return <Dreistufig key={c.id} label={c.label} value={ev[c.id]} onChange={v => handleButtonChange(c.id, v)} />;
-        if (c.type === "decision") return <Decision key={c.id} value={ev[c.id]} onChange={v => handleButtonChange(c.id, v)} />;
+        if (c.type === "yesno") return <YesNo key={c.id} label={c.label} value={ev[c.id]} onChange={getButtonCb(c.id)} disabled={c.readonly} />;
+        if (c.type === "posneg") return <PosNeg key={c.id} label={c.label} value={ev[c.id]} onChange={getButtonCb(c.id)} />;
+        if (c.type === "text") return <TextInput key={c.id} label={c.label} value={ev[c.id]} onChange={getTextCb(c.id)} />;
+        if (c.type === "dreistufig") return <Dreistufig key={c.id} label={c.label} value={ev[c.id]} onChange={getButtonCb(c.id)} />;
+        if (c.type === "decision") return <Decision key={c.id} value={ev[c.id]} onChange={getButtonCb(c.id)} />;
         return null;
       })}
     </div>
@@ -718,7 +745,7 @@ const ApoNameInput = React.memo(function ApoNameInput({ onAssign, initialData, a
 
 const APP_PASSWORD = "soundingboard2026";
 
-function GroupPhotoOverlay({ src, onClose }) {
+const GroupPhotoOverlay = React.memo(function GroupPhotoOverlay({ src, onClose }) {
   const [zoom, setZoom] = useState(1);
   const [pos, setPos] = useState({x: 0, y: 0});
   const [drag, setDrag] = useState(null);
@@ -796,7 +823,7 @@ function GroupPhotoOverlay({ src, onClose }) {
       </div>
     </div>
   );
-}
+});
 
 function PasswordScreen({ onUnlock }) {
   const [pw, setPw] = useState("");
@@ -1510,12 +1537,12 @@ function App() {
         .on("postgres_changes", { event: "UPDATE", schema: "public", table: "soundingboard", filter: "id=eq.main" }, (payload) => {
           const d = payload.new?.data;
           if (!d) return;
-          // Ignore echoes from own save (within 2s)
-          if (Date.now() - lastSaveTime.current < 2000) return;
-          if (d.tbdAssignments) setTbdAssignments(d.tbdAssignments);
-          if (d.apoAssignments) setApoAssignments(d.apoAssignments);
-          if (d.apoParticipants && d.apoParticipants.length > 0) setApoParticipants(d.apoParticipants);
-          if (d.ptaParticipants && d.ptaParticipants.length > 0) setPtaParticipants(d.ptaParticipants);
+          if (Date.now() - lastSaveTime.current < 5000) return;
+          // Only update state if data actually changed (prevents unnecessary re-renders/flicker)
+          if (d.tbdAssignments) setTbdAssignments(prev => JSON.stringify(prev) === JSON.stringify(d.tbdAssignments) ? prev : d.tbdAssignments);
+          if (d.apoAssignments) setApoAssignments(prev => JSON.stringify(prev) === JSON.stringify(d.apoAssignments) ? prev : d.apoAssignments);
+          if (d.apoParticipants && d.apoParticipants.length > 0) setApoParticipants(prev => JSON.stringify(prev) === JSON.stringify(d.apoParticipants) ? prev : d.apoParticipants);
+          if (d.ptaParticipants && d.ptaParticipants.length > 0) setPtaParticipants(prev => JSON.stringify(prev) === JSON.stringify(d.ptaParticipants) ? prev : d.ptaParticipants);
           setSyncStatus("synced");
         })
         .subscribe();
@@ -1527,10 +1554,10 @@ function App() {
           .on("postgres_changes", { event: "UPDATE", schema: "public", table: "soundingboard", filter: "id=eq." + supabaseId }, (payload) => {
             const d = payload.new?.data;
             if (!d) return;
-            if (Date.now() - lastSaveTime.current < 2000) return;
+            if (Date.now() - lastSaveTime.current < 5000) return;
             skipNextSync.current = true;
-            if (d.evals) setEvals(d.evals);
-            if (d.apoEvals) setApoEvals(d.apoEvals);
+            if (d.evals) setEvals(prev => JSON.stringify(prev) === JSON.stringify(d.evals) ? prev : d.evals);
+            if (d.apoEvals) setApoEvals(prev => JSON.stringify(prev) === JSON.stringify(d.apoEvals) ? prev : d.apoEvals);
             setSyncStatus("synced");
           })
           .subscribe();
@@ -1544,37 +1571,63 @@ function App() {
 
   // --- SAVE: Assignments always to "main", evals to own row ---
   const skipAssignmentSync = useRef(false);
+  const pendingDataRef = useRef(null);
+  const isSaving = useRef(false);
+
+  // Core save function (reusable for debounced + flush)
+  const doSave = useCallback(async (saveData) => {
+    if (!supabase || !sessionMode || isSaving.current) return;
+    isSaving.current = true;
+    setSyncStatus("saving");
+    lastSaveTime.current = Date.now();
+    try {
+      const { _evals, _apoEvals, _program, _userEmail, _tbdAssignments, _apoAssignments, _apoParticipants, _ptaParticipants, _supabaseId } = saveData;
+      // 1) Always save assignments to "main"
+      const { data: mainCurrent } = await supabase.from("soundingboard").select("data").eq("id", "main").single();
+      const mainSave = mainCurrent?.data ? { ...mainCurrent.data } : {};
+      mainSave.tbdAssignments = _tbdAssignments;
+      mainSave.apoAssignments = _apoAssignments;
+      mainSave.apoParticipants = _apoParticipants;
+      mainSave.ptaParticipants = _ptaParticipants;
+      const { error: mainErr } = await supabase.from("soundingboard").upsert({
+        id: "main", data: mainSave, updated_at: new Date().toISOString()
+      });
+      console.log("Save main:", mainErr ? "ERROR: " + mainErr.message : "OK");
+
+      // 2) Save evals to own row
+      const userSave = { evals: _evals, apoEvals: _apoEvals, program: _program, userEmail: _userEmail };
+      const { error: userErr } = await supabase.from("soundingboard").upsert({
+        id: _supabaseId, data: userSave, updated_at: new Date().toISOString()
+      });
+      console.log("Save user (" + _supabaseId + "):", userErr ? "ERROR: " + userErr.message : "OK");
+      setSyncStatus(mainErr || userErr ? "error" : "synced");
+    } catch(e) { console.error("Save catch:", e); setSyncStatus("error"); }
+    finally { isSaving.current = false; pendingDataRef.current = null; }
+  }, [supabase, sessionMode]);
+
+  // Debounced save effect - only save if data actually changed
+  const lastSavedDataRef = useRef(null);
   useEffect(() => {
     if (!supabase || !sessionMode || syncStatus === "loading") return;
     if (skipNextSync.current) { skipNextSync.current = false; return; }
+    const saveData = { _evals: evals, _apoEvals: apoEvals, _program: program, _userEmail: userEmail, _tbdAssignments: tbdAssignments, _apoAssignments: apoAssignments, _apoParticipants: apoParticipants, _ptaParticipants: ptaParticipants, _supabaseId: supabaseId };
+    // Skip save if data is identical to last successful save
+    const dataKey = JSON.stringify({ e: evals, ae: apoEvals, p: program, ta: tbdAssignments, aa: apoAssignments, ap: apoParticipants, pp: ptaParticipants });
+    if (lastSavedDataRef.current === dataKey) return;
     if (saveTimer.current) clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(async () => {
-      setSyncStatus("saving");
-      lastSaveTime.current = Date.now();
-      try {
-        // 1) Always save assignments to "main"
-        // First load current main data to merge
-        const { data: mainCurrent } = await supabase.from("soundingboard").select("data").eq("id", "main").single();
-        const mainSave = mainCurrent?.data ? { ...mainCurrent.data } : {};
-        mainSave.tbdAssignments = tbdAssignments;
-        mainSave.apoAssignments = apoAssignments;
-        mainSave.apoParticipants = apoParticipants;
-        mainSave.ptaParticipants = ptaParticipants;
-        const { error: mainErr } = await supabase.from("soundingboard").upsert({
-          id: "main", data: mainSave, updated_at: new Date().toISOString()
-        });
-        console.log("Save main:", mainErr ? "ERROR: " + mainErr.message : "OK");
-
-        // 2) Save evals to own row
-        const userSave = { evals, apoEvals, program, userEmail };
-        const { error: userErr } = await supabase.from("soundingboard").upsert({
-          id: supabaseId, data: userSave, updated_at: new Date().toISOString()
-        });
-        console.log("Save user (" + supabaseId + "):", userErr ? "ERROR: " + userErr.message : "OK");
-        setSyncStatus(mainErr || userErr ? "error" : "synced");
-      } catch(e) { console.error("Save catch:", e); setSyncStatus("error"); }
+    pendingDataRef.current = saveData;
+    saveTimer.current = setTimeout(() => {
+      doSave(saveData).then(() => { lastSavedDataRef.current = dataKey; });
     }, 500);
   }, [evals, apoEvals, program, tbdAssignments, apoAssignments, apoParticipants, ptaParticipants]);
+
+  // Flush pending save immediately (used before navigation)
+  const flushSave = useCallback(async () => {
+    if (saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null; }
+    if (pendingDataRef.current) {
+      await doSave(pendingDataRef.current);
+    }
+  }, [doSave]);
 
   const currentParticipants = program === "apo" ? apoParticipants : ptaParticipants;
   const currentEvals = program === "apo" ? apoEvals : evals;
@@ -1598,27 +1651,30 @@ function App() {
     const key = p.key;
     const info = currentInfo[key];
     const assign = currentAssignments[key];
-    // For apo: use assignment data (partner from suggestion), for pta: use static info
     const partnerSource = program === "apo" && assign ? assign : info;
-    const cur = currentEvals[key] || {};
-    const updates = {};
-    // Always sync readonly fields from master data
-    if (partnerSource && (partnerSource.partner === true || partnerSource.partner === false)) {
-      const val = partnerSource.partner ? "Ja" : "Nein";
-      if (cur.partnerprogramm !== val) updates.partnerprogramm = val;
-    }
-    if (program === "pta" && info && (info.ptaFamily === true || info.ptaFamily === false)) {
-      const val = info.ptaFamily ? "Ja" : "Nein";
-      if (cur.pta_family !== val) updates.pta_family = val;
-    }
-    if (Object.keys(updates).length > 0) {
-      setCurrentEvals(prev => ({ ...prev, [key]: { ...prev[key], ...updates } }));
-    }
+    setCurrentEvals(prev => {
+      const cur = prev[key] || {};
+      const updates = {};
+      if (partnerSource && (partnerSource.partner === true || partnerSource.partner === false)) {
+        const val = partnerSource.partner ? "Ja" : "Nein";
+        if (cur.partnerprogramm !== val) updates.partnerprogramm = val;
+      }
+      if (program === "pta" && info && (info.ptaFamily === true || info.ptaFamily === false)) {
+        const val = info.ptaFamily ? "Ja" : "Nein";
+        if (cur.pta_family !== val) updates.pta_family = val;
+      }
+      if (Object.keys(updates).length > 0) {
+        return { ...prev, [key]: { ...cur, ...updates } };
+      }
+      return prev; // No change → no re-render → no unnecessary save
+    });
   }, [idx, view, p.key, program, currentAssignments]);
 
+  const pKeyRef = useRef(p.key);
+  pKeyRef.current = p.key;
   const update = useCallback((val) => {
-    setCurrentEvals(prev => ({ ...prev, [p.key]: val }));
-  }, [p.key, program]);
+    setCurrentEvals(prev => ({ ...prev, [pKeyRef.current]: val }));
+  }, [setCurrentEvals]);
 
   const downloadExcelGlobal = useCallback(() => {
     const headers = program === "apo"
@@ -1651,10 +1707,10 @@ function App() {
   }, [currentEvals, program, sessionMode, userEmail]);
 
   if (view === "password") {
-    return <PasswordScreen onUnlock={({ mode, email }) => { setSessionMode(mode); setUserEmail(email); setView("select_program"); }} />;
+    return <PasswordScreen onUnlock={async ({ mode, email }) => { await flushSave(); setSessionMode(mode); setUserEmail(email); setView("select_program"); }} />;
   }
   if (view === "select_program") {
-    return <ProgramSelector onSelect={(prog) => { setProgram(prog); setIdx(0); setView("eval"); }} />;
+    return <ProgramSelector onSelect={async (prog) => { await flushSave(); setProgram(prog); setIdx(0); setView("eval"); }} />;
   }
   if (view === "auswertung") {
     return <Auswertung
@@ -1688,7 +1744,7 @@ function App() {
           <span style={{ fontFamily: "Trebuchet MS, sans-serif", fontSize: 12, color: program === "apo" ? ORANGE : "#9CA3AF", background: program === "apo" ? "#FFF8EE" : "#F3F4F6", padding: "2px 8px", borderRadius: 4, fontWeight: 600 }}>
             {program === "apo" ? "APO THINK!" : "PTA THINK!"}
           </span>
-          <button onClick={() => { setView("select_program"); setIdx(0); }} style={{
+          <button onClick={async () => { await flushSave(); setView("select_program"); setIdx(0); }} style={{
             padding: "3px 8px", borderRadius: 4, border: "1px solid #E5E7EB",
             background: "transparent", color: "#9CA3AF", fontFamily: "Trebuchet MS, sans-serif",
             fontSize: 10, cursor: "pointer"
@@ -1875,13 +1931,13 @@ function App() {
               {/* Navigation */}
               {/* Navigation */}
               <div style={{ display: "flex", justifyContent: "space-between", marginTop: 20 }}>
-                <button onClick={() => idx > 0 && setIdx(idx - 1)} disabled={idx === 0} style={{
+                <button onClick={() => { if (idx > 0) { document.activeElement && document.activeElement.blur(); setIdx(idx - 1); } }} disabled={idx === 0} style={{
                   padding: "10px 22px", borderRadius: 6, border: "1.5px solid #D1D5DB",
                   background: "#fff", color: idx === 0 ? "#D1D5DB" : BLACK,
                   fontFamily: "Trebuchet MS, sans-serif", fontSize: 14, fontWeight: 600,
                   cursor: idx === 0 ? "default" : "pointer", opacity: idx === 0 ? 0.4 : 1
                 }}>{"\u2190"} Zur{"\u00fc"}ck</button>
-                <button onClick={() => idx < currentParticipants.length - 1 && setIdx(idx + 1)}
+                <button onClick={() => { if (idx < currentParticipants.length - 1) { document.activeElement && document.activeElement.blur(); setIdx(idx + 1); } }}
                   disabled={idx === currentParticipants.length - 1} style={{
                   padding: "10px 22px", borderRadius: 6, border: "none",
                   background: idx === currentParticipants.length - 1 ? "#D1D5DB" : (program === "apo" ? ORANGE : PETROL), color: "#fff",
