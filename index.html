@@ -384,7 +384,7 @@ const TextInput = React.memo(function TextInput({ value, onChange, label }) {
       <textarea value={localValue} onChange={handleChange} rows={2} placeholder="Hier eingeben..."
         style={{ width: "100%", padding: "8px 12px", borderRadius: 6, border: "1.5px solid #D1D5DB", fontFamily: "Trebuchet MS, sans-serif", fontSize: 13, resize: "vertical", outline: "none", boxSizing: "border-box" }}
         onFocus={e => { e.target.style.borderColor = PETROL; isFocused.current = true; }}
-        onBlur={e => { e.target.style.borderColor = "#D1D5DB"; isFocused.current = false; latestParentValue.current = localValue; if (debounceRef.current) clearTimeout(debounceRef.current); if (onChange) onChange(localValue); }} />
+        onBlur={e => { e.target.style.borderColor = "#D1D5DB"; isFocused.current = false; latestParentValue.current = localValue; if (debounceRef.current) clearTimeout(debounceRef.current); console.log("[TextInput] onBlur →", label, "value:", localValue); if (onChange) onChange(localValue); }} />
     </div>
   );
 });
@@ -424,8 +424,12 @@ const EvalForm = React.memo(function EvalForm({ evaluation, onUpdate, criteria }
   }, [onUpdate]);
 
   const handleTextChange = useCallback((fieldId, value) => {
-    if (evRef.current[fieldId] !== value) {
-      onUpdate({ ...evRef.current, [fieldId]: value });
+    const oldVal = evRef.current[fieldId];
+    console.log("[EvalForm] handleTextChange:", fieldId, "old:", oldVal, "new:", value, "changed:", oldVal !== value);
+    if (oldVal !== value) {
+      const updated = { ...evRef.current, [fieldId]: value };
+      console.log("[EvalForm] calling onUpdate with keys:", Object.keys(updated));
+      onUpdate(updated);
     }
   }, [onUpdate]);
 
@@ -1555,7 +1559,6 @@ function App() {
             const d = payload.new?.data;
             if (!d) return;
             if (Date.now() - lastSaveTime.current < 5000) return;
-            skipNextSync.current = true;
             if (d.evals) setEvals(prev => JSON.stringify(prev) === JSON.stringify(d.evals) ? prev : d.evals);
             if (d.apoEvals) setApoEvals(prev => JSON.stringify(prev) === JSON.stringify(d.apoEvals) ? prev : d.apoEvals);
             setSyncStatus("synced");
@@ -1596,6 +1599,7 @@ function App() {
 
       // 2) Save evals to own row
       const userSave = { evals: _evals, apoEvals: _apoEvals, program: _program, userEmail: _userEmail };
+      console.log("[doSave] Saving evals keys:", Object.keys(_evals || {}), "karin zusatzinfo:", (_evals?.karin_heisler?.zusatzinfo || "EMPTY"));
       const { error: userErr } = await supabase.from("soundingboard").upsert({
         id: _supabaseId, data: userSave, updated_at: new Date().toISOString()
       });
@@ -1605,19 +1609,17 @@ function App() {
     finally { isSaving.current = false; pendingDataRef.current = null; }
   }, [supabase, sessionMode]);
 
-  // Debounced save effect - only save if data actually changed
-  const lastSavedDataRef = useRef(null);
+  // Debounced save effect
   useEffect(() => {
     if (!supabase || !sessionMode || syncStatus === "loading") return;
-    if (skipNextSync.current) { skipNextSync.current = false; return; }
-    const saveData = { _evals: evals, _apoEvals: apoEvals, _program: program, _userEmail: userEmail, _tbdAssignments: tbdAssignments, _apoAssignments: apoAssignments, _apoParticipants: apoParticipants, _ptaParticipants: ptaParticipants, _supabaseId: supabaseId };
-    // Skip save if data is identical to last successful save
-    const dataKey = JSON.stringify({ e: evals, ae: apoEvals, p: program, ta: tbdAssignments, aa: apoAssignments, ap: apoParticipants, pp: ptaParticipants });
-    if (lastSavedDataRef.current === dataKey) return;
+    if (skipNextSync.current) { skipNextSync.current = false; console.log("[SAVE] Skipped (skipNextSync)"); return; }
     if (saveTimer.current) clearTimeout(saveTimer.current);
+    const saveData = { _evals: evals, _apoEvals: apoEvals, _program: program, _userEmail: userEmail, _tbdAssignments: tbdAssignments, _apoAssignments: apoAssignments, _apoParticipants: apoParticipants, _ptaParticipants: ptaParticipants, _supabaseId: supabaseId };
     pendingDataRef.current = saveData;
+    console.log("[SAVE] Debounce started (500ms)...");
     saveTimer.current = setTimeout(() => {
-      doSave(saveData).then(() => { lastSavedDataRef.current = dataKey; });
+      console.log("[SAVE] Debounce fired, calling doSave");
+      doSave(saveData);
     }, 500);
   }, [evals, apoEvals, program, tbdAssignments, apoAssignments, apoParticipants, ptaParticipants]);
 
@@ -1673,6 +1675,7 @@ function App() {
   const pKeyRef = useRef(p.key);
   pKeyRef.current = p.key;
   const update = useCallback((val) => {
+    console.log("[App] update called for key:", pKeyRef.current, "zusatzinfo:", val?.zusatzinfo, "entscheidung:", val?.entscheidung);
     setCurrentEvals(prev => ({ ...prev, [pKeyRef.current]: val }));
   }, [setCurrentEvals]);
 
