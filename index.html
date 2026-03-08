@@ -238,8 +238,8 @@ function Sidebar({ participants, evaluations, currentIdx, onSelect, tbdAssignmen
         const sidebarName = tbdName ? tbdName.name : p.name;
         const photoSrc = (program === "apo") ? getApoPhoto(p.key, tbdAssignments) : PHOTOS[p.key];
         return (
-          <div key={p.key + i} onClick={() => onSelect(i)} style={{
-            display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", cursor: "pointer",
+          <div key={p.key + i} style={{
+            display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", cursor: "default",
             borderLeft: act ? "3px solid " + PETROL : "3px solid transparent",
             background: act ? "#EFF9FA" : "transparent"
           }}>
