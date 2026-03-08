@@ -1517,20 +1517,8 @@ function App() {
       const SUPA_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9zamV2c2x0cmZjdmZsaHhydmdjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2MTcyODAsImV4cCI6MjA4ODE5MzI4MH0.NZFyz81Kh9kPfBx6suAbHSCrym-ruCfH8u32riAj51I";
       const hdrs = { "apikey": SUPA_KEY, "Authorization": "Bearer " + SUPA_KEY };
       try {
-        // 1) Always load shared assignments from "main" — via direct fetch
-        console.log("[LOAD] Loading shared assignments from 'main' via direct fetch...");
-        const mainResp = await fetch(SUPA_URL + "/rest/v1/soundingboard?id=eq.main&select=data", { headers: hdrs });
-        const mainRows = await mainResp.json();
-        const mainData = mainRows && mainRows[0] ? mainRows[0] : null;
-        if (mainData?.data) {
-          if (mainData.data.tbdAssignments) setTbdAssignments(mainData.data.tbdAssignments);
-          if (mainData.data.apoAssignments) setApoAssignments(mainData.data.apoAssignments);
-          if (mainData.data.apoParticipants && mainData.data.apoParticipants.length > 0) setApoParticipants(mainData.data.apoParticipants);
-          if (mainData.data.ptaParticipants && mainData.data.ptaParticipants.length > 0) setPtaParticipants(mainData.data.ptaParticipants);
-        }
-
-        // 2) Load evals from own row — via direct fetch
-        console.log("[LOAD] Loading evals from '" + supabaseId + "' via direct fetch...");
+        // 1) Load user row first (contains evals + assignments since main-PATCH fix)
+        console.log("[LOAD] Loading user data from '" + supabaseId + "' via direct fetch...");
         const userResp = await fetch(SUPA_URL + "/rest/v1/soundingboard?id=eq." + encodeURIComponent(supabaseId) + "&select=data", { headers: hdrs });
         const userRows = await userResp.json();
         const userData = userRows && userRows[0] ? userRows[0] : null;
@@ -1539,9 +1527,34 @@ function App() {
           if (userData.data.apoEvals) setApoEvals(userData.data.apoEvals);
           if (userData.data.program) setProgram(userData.data.program);
         }
+        console.log("[LOAD] User data loaded. evals keys:", userData?.data?.evals ? Object.keys(userData.data.evals).length : 0);
+
+        // 2) Load assignments: prefer user row, fallback to "main" row
+        const ud = userData?.data;
+        let assignmentsLoaded = false;
+        if (ud && (ud.tbdAssignments || ud.apoAssignments)) {
+          console.log("[LOAD] Loading assignments from USER row (new format)");
+          if (ud.tbdAssignments) setTbdAssignments(ud.tbdAssignments);
+          if (ud.apoAssignments) setApoAssignments(ud.apoAssignments);
+          if (ud.apoParticipants && ud.apoParticipants.length > 0) setApoParticipants(ud.apoParticipants);
+          if (ud.ptaParticipants && ud.ptaParticipants.length > 0) setPtaParticipants(ud.ptaParticipants);
+          assignmentsLoaded = true;
+        }
+        if (!assignmentsLoaded) {
+          // Fallback: load from "main" row (legacy data or first-time load)
+          console.log("[LOAD] No assignments in user row, falling back to 'main' row...");
+          const mainResp = await fetch(SUPA_URL + "/rest/v1/soundingboard?id=eq.main&select=data", { headers: hdrs });
+          const mainRows = await mainResp.json();
+          const mainData = mainRows && mainRows[0] ? mainRows[0] : null;
+          if (mainData?.data) {
+            if (mainData.data.tbdAssignments) setTbdAssignments(mainData.data.tbdAssignments);
+            if (mainData.data.apoAssignments) setApoAssignments(mainData.data.apoAssignments);
+            if (mainData.data.apoParticipants && mainData.data.apoParticipants.length > 0) setApoParticipants(mainData.data.apoParticipants);
+            if (mainData.data.ptaParticipants && mainData.data.ptaParticipants.length > 0) setPtaParticipants(mainData.data.ptaParticipants);
+          }
+        }
         dataLoadedAt.current = Date.now();
         updateSyncStatus("synced");
-        console.log("[LOAD] Data loaded successfully. evals keys:", userData?.data?.evals ? Object.keys(userData.data.evals).length : 0);
       } catch(e) { console.error("Load catch:", e); updateSyncStatus("error"); }
     };
     loadData();
@@ -1558,7 +1571,7 @@ function App() {
     return () => clearTimeout(t);
   }, [view]);
 
-  // --- SAVE: Assignments always to "main", evals to own row ---
+  // --- SAVE: Everything to user row only (main-PATCH removed — caused 503 + data loss) ---
   const pendingDataRef = useRef(null);
   const isSaving = useRef(false);
   const doSaveRef = useRef(null);
@@ -1580,41 +1593,24 @@ function App() {
       const SUPA_URL = "https://osjevsltrfcvflhxrvgc.supabase.co";
       const SUPA_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9zamV2c2x0cmZjdmZsaHhydmdjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2MTcyODAsImV4cCI6MjA4ODE5MzI4MH0.NZFyz81Kh9kPfBx6suAbHSCrym-ruCfH8u32riAj51I";
 
-      // 1) Always save assignments to "main" — NO read needed, write only assignment fields
-      // CRITICAL FIX: Do NOT read+spread mainCurrent.data!
-      // The old spread { ...mainCurrent.data } copied stale evals into the main row body.
-      // When the main PATCH got 503 and was retried server-side without the ?id=eq.main filter,
-      // it overwrote ALL rows (including user rows) with stale data, destroying user evals.
-      const mainSave = {
+      // CRITICAL FIX: main-PATCH REMOVED ENTIRELY.
+      // Proven: main-PATCH always returns 503 and causes user-row data loss ~2s later.
+      // When main-PATCH was blocked, user data survived. When active, data was overwritten.
+      // Root cause likely: 503 triggers Supabase internal retry/realtime that corrupts user row.
+      // Assignments are now saved IN the user row alongside evals, so nothing is lost.
+      console.log("[doSave] main-PATCH DISABLED — assignments saved in user row instead");
+
+      // Save evals + assignments to own row — single PATCH, no interference
+      const userSave = {
+        evals: _evals,
+        apoEvals: _apoEvals,
+        program: _program,
+        userEmail: _userEmail,
         tbdAssignments: _tbdAssignments,
         apoAssignments: _apoAssignments,
         apoParticipants: _apoParticipants,
         ptaParticipants: _ptaParticipants
       };
-      let mainErr = null;
-      try {
-        const mainPatchBody = JSON.stringify({ data: mainSave, updated_at: new Date().toISOString() });
-        const mainResp = await fetch(SUPA_URL + "/rest/v1/soundingboard?id=eq.main", {
-          method: "PATCH",
-          headers: {
-            "apikey": SUPA_KEY,
-            "Authorization": "Bearer " + SUPA_KEY,
-            "Content-Type": "application/json",
-            "Prefer": "return=minimal"
-          },
-          body: mainPatchBody
-        });
-        if (!mainResp.ok) {
-          const errText = await mainResp.text();
-          mainErr = { message: "PATCH main " + mainResp.status + ": " + errText };
-        }
-      } catch(mainFetchErr) {
-        mainErr = { message: "fetch main error: " + mainFetchErr.message };
-      }
-      console.log("Save main:", mainErr ? "ERROR: " + mainErr.message : "OK");
-
-      // 2) Save evals to own row — use direct REST PATCH (proven reliable)
-      const userSave = { evals: _evals, apoEvals: _apoEvals, program: _program, userEmail: _userEmail };
       // Deep diagnostic: log exact karin_heisler eval being saved
       const kh = _evals && _evals["karin_heisler"];
       console.log("[doSave] karin_heisler keys:", kh ? Object.keys(kh).join(",") : "MISSING", "zusatzinfo:", kh ? kh.zusatzinfo : "N/A");
@@ -1648,7 +1644,7 @@ function App() {
         userErr = { message: "fetch error: " + fetchErr.message };
       }
       console.log("Save user (" + _supabaseId + "):", userErr ? "ERROR: " + userErr.message : "OK");
-      updateSyncStatus(mainErr || userErr ? "error" : "synced");
+      updateSyncStatus(userErr ? "error" : "synced");
     } catch(e) { console.error("Save catch:", e); updateSyncStatus("error"); }
     finally {
       isSaving.current = false;
