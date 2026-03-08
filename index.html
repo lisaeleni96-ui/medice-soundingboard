@@ -212,20 +212,6 @@ function Sidebar({ participants, evaluations, currentIdx, onSelect, tbdAssignmen
     <div style={{ width: 300, minWidth: 300, background: "#fff", borderRight: "1px solid #E5E7EB", overflowY: "auto", display: "flex", flexDirection: "column" }}>
       <div style={{ padding: "16px 14px 10px", borderBottom: "1px solid #E5E7EB", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <span style={{ fontFamily: "Trebuchet MS, sans-serif", fontSize: 11, fontWeight: 700, color: PETROL, textTransform: "uppercase", letterSpacing: 1.5 }}>Teilnehmer ({participants.length})</span>
-        <div style={{ display: "flex", gap: 4 }}>
-          <button onClick={onAdd} title="Teilnehmer hinzuf\u00fcgen" style={{
-            width: 24, height: 24, borderRadius: 4, border: "1px solid #D1D5DB",
-            background: "#fff", color: PETROL, fontSize: 16, fontWeight: 700,
-            cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0
-          }}>+</button>
-          {participants.length > 1 && (
-            <button onClick={onRemove} title="Letzten Teilnehmer entfernen" style={{
-              width: 24, height: 24, borderRadius: 4, border: "1px solid #EF444440",
-              background: "#fff", color: "#EF4444", fontSize: 16, fontWeight: 700,
-              cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0
-            }}>{"\u2212"}</button>
-          )}
-        </div>
       </div>
       <div style={{ flex: 1, overflowY: "auto" }}>
       {participants.map((p, i) => {
@@ -1985,24 +1971,7 @@ function App() {
                   }}
                 />
               )}
-              {/* Apo: free text Vorname/Nachname/Apotheke */}
-              {program === "apo" && (
-                <ApoNameInput
-                  key={p.key}
-                  initialData={currentAssignments[p.key] || null}
-                  apoAssignments={apoAssignments}
-                  participantKey={p.key}
-                  onAssign={(data) => {
-                    if (data) {
-                      setApoAssignments(prev => ({ ...prev, [p.key]: data }));
-                      APO_PARTICIPANT_INFO[p.key] = { apotheke: data.apotheke || "", ort: data.ort || "", plz: data.plz || "", partner: data.partner || false, kooperation: data.kooperation || "", adm: data.adm || "" };
-                    } else {
-                      setApoAssignments(prev => { const n = {...prev}; delete n[p.key]; return n; });
-                      APO_PARTICIPANT_INFO[p.key] = { apotheke: "", ort: "", plz: "", partner: false, kooperation: "", adm: "" };
-                    }
-                  }}
-                />
-              )}
+              {/* Apo Zuordnung entfernt — alle bereits zugeordnet */}
 
               {/* Form */}
               <div style={{ background: "#fff", borderRadius: 10, padding: "24px 28px", boxShadow: "0 1px 3px rgba(0,0,0,0.05)", border: "1px solid #E5E7EB" }}>
@@ -2028,19 +1997,7 @@ function App() {
                 }}>Weiter & Speichern {"\u2192"}</button>
               </div>
 
-              {/* Nur Speichern (ohne Navigation) */}
-              <div style={{ marginTop: 10 }}>
-                <button onClick={handleManualSave} style={{
-                  width: "100%", padding: "10px 16px", borderRadius: 6,
-                  border: saveButtonFlash === "saved" ? "2px solid #10B981" : hasUnsavedChanges ? "2px solid #EF4444" : "1.5px solid #D1D5DB",
-                  background: saveButtonFlash === "saved" ? "#ECFDF5" : hasUnsavedChanges ? "#FEF2F2" : "#fff",
-                  color: saveButtonFlash === "saved" ? "#059669" : hasUnsavedChanges ? "#DC2626" : "#6B7280",
-                  fontFamily: "Trebuchet MS, sans-serif", fontSize: 13, fontWeight: 600, cursor: "pointer",
-                  transition: "all 0.3s ease"
-                }}>
-                  {saveButtonFlash === "saved" ? "\u2713 Gespeichert!" : hasUnsavedChanges ? "\u26A0 Speichern" : "\uD83D\uDCBE Speichern"}
-                </button>
-              </div>
+              {/* Einzelner Speichern-Button entfernt — Weiter & Speichern reicht */}
 
               {/* Excel + Zusammenfassung Buttons */}
               <div style={{ display: "flex", gap: 10, marginTop: 10, paddingBottom: 24 }}>
@@ -2050,7 +2007,7 @@ function App() {
                   fontFamily: "Trebuchet MS, sans-serif", fontSize: 14, fontWeight: 600, cursor: "pointer",
                   display: "flex", alignItems: "center", justifyContent: "center", gap: 8
                 }}>Excel herunterladen</button>
-                <button onClick={() => setView("summary")} style={{
+                <button onClick={async () => { await handleManualSave(); setView("summary"); }} style={{
                   flex: 1, padding: "12px 16px", borderRadius: 8, border: "none",
                   background: ORANGE, color: "#fff",
                   fontFamily: "Trebuchet MS, sans-serif", fontSize: 14, fontWeight: 600, cursor: "pointer",
