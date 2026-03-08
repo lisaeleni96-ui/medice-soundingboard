@@ -1597,12 +1597,35 @@ function App() {
       });
       console.log("Save main:", mainErr ? "ERROR: " + mainErr.message : "OK");
 
-      // 2) Save evals to own row
+      // 2) Save evals to own row — use direct REST PATCH (proven reliable)
+      const SUPA_URL = "https://osjevsltrfcvflhxrvgc.supabase.co";
+      const SUPA_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9zamV2c2x0cmZjdmZsaHhydmdjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2MTcyODAsImV4cCI6MjA4ODE5MzI4MH0.NZFyz81Kh9kPfBx6suAbHSCrym-ruCfH8u32riAj51I";
       const userSave = { evals: _evals, apoEvals: _apoEvals, program: _program, userEmail: _userEmail };
-      console.log("[doSave] Saving evals to", _supabaseId);
-      const { error: userErr } = await supabase.from("soundingboard").upsert({
-        id: _supabaseId, data: userSave, updated_at: new Date().toISOString()
-      });
+      // Deep diagnostic: log exact karin_heisler eval being saved
+      const kh = _evals && _evals["karin_heisler"];
+      console.log("[doSave] karin_heisler keys:", kh ? Object.keys(kh).join(",") : "MISSING", "zusatzinfo:", kh ? kh.zusatzinfo : "N/A");
+      console.log("[doSave] Saving evals to", _supabaseId, "via direct PATCH");
+      let userErr = null;
+      try {
+        const patchBody = JSON.stringify({ data: userSave, updated_at: new Date().toISOString() });
+        console.log("[doSave] PATCH body length:", patchBody.length);
+        const resp = await fetch(SUPA_URL + "/rest/v1/soundingboard?id=eq." + encodeURIComponent(_supabaseId), {
+          method: "PATCH",
+          headers: {
+            "apikey": SUPA_KEY,
+            "Authorization": "Bearer " + SUPA_KEY,
+            "Content-Type": "application/json",
+            "Prefer": "return=minimal"
+          },
+          body: patchBody
+        });
+        if (!resp.ok) {
+          const errText = await resp.text();
+          userErr = { message: "PATCH " + resp.status + ": " + errText };
+        }
+      } catch(fetchErr) {
+        userErr = { message: "fetch error: " + fetchErr.message };
+      }
       console.log("Save user (" + _supabaseId + "):", userErr ? "ERROR: " + userErr.message : "OK");
       updateSyncStatus(mainErr || userErr ? "error" : "synced");
     } catch(e) { console.error("Save catch:", e); updateSyncStatus("error"); }
@@ -1631,7 +1654,8 @@ function App() {
     if (saveTimer.current) clearTimeout(saveTimer.current);
     const saveData = { _evals: evals, _apoEvals: apoEvals, _program: program, _userEmail: userEmail, _tbdAssignments: tbdAssignments, _apoAssignments: apoAssignments, _apoParticipants: apoParticipants, _ptaParticipants: ptaParticipants, _supabaseId: supabaseId };
     pendingDataRef.current = saveData;
-    console.log("[SAVE] Debounce started (200ms)...");
+    const khSnap = evals && evals["karin_heisler"];
+    console.log("[SAVE] Debounce started (200ms)... karin_heisler.zusatzinfo:", khSnap ? khSnap.zusatzinfo : "N/A", "keys:", khSnap ? Object.keys(khSnap).join(",") : "NONE");
     saveTimer.current = setTimeout(() => {
       console.log("[SAVE] Debounce fired, calling doSave");
       pendingDataRef.current = null;
@@ -1730,8 +1754,12 @@ function App() {
   const pKeyRef = useRef(p.key);
   pKeyRef.current = p.key;
   const update = useCallback((val) => {
-    console.log("[App] update called for key:", pKeyRef.current, "zusatzinfo:", val?.zusatzinfo, "entscheidung:", val?.entscheidung);
-    setCurrentEvals(prev => ({ ...prev, [pKeyRef.current]: val }));
+    console.log("[App] update called for key:", pKeyRef.current, "zusatzinfo:", val?.zusatzinfo, "entscheidung:", val?.entscheidung, "allKeys:", val ? Object.keys(val).join(",") : "null");
+    setCurrentEvals(prev => {
+      const next = { ...prev, [pKeyRef.current]: val };
+      console.log("[App] setCurrentEvals: karin_heisler.zusatzinfo AFTER:", next["karin_heisler"]?.zusatzinfo);
+      return next;
+    });
   }, [setCurrentEvals]);
 
   const downloadExcelGlobal = useCallback(() => {
