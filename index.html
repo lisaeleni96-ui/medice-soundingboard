@@ -14,36 +14,25 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <!-- Supabase JS client REMOVED — all DB access via direct fetch to eliminate hidden write paths -->
   <script>
-    // Initialize Supabase BEFORE Babel loads (Babel overwrites window.supabase)
-    window.__SUPABASE_CLIENT__ = null;
-    try {
-      var sb = window.supabase;
-      var fn = sb.createClient || sb.default?.createClient;
-      if (!fn) {
-        // Try to find createClient in nested exports
-        var keys = Object.keys(sb);
-        for (var i = 0; i < keys.length; i++) {
-          if (typeof sb[keys[i]] === 'function' && keys[i].toLowerCase().includes('create')) {
-            fn = sb[keys[i]]; break;
-          }
+    // Sentinel value so existing "if (!supabase)" guards still work
+    window.__SUPABASE_CLIENT__ = true;
+    // --- GLOBAL FETCH MONITOR: Log every write to soundingboard ---
+    (function() {
+      var _origFetch = window.fetch;
+      window.fetch = function(url, opts) {
+        if (typeof url === "string" && url.indexOf("soundingboard") !== -1 && opts && opts.method && opts.method !== "GET") {
+          console.warn("[FETCH-MONITOR] " + opts.method + " " + url, "body-length:", opts.body ? opts.body.length : 0, "stack:", new Error().stack);
         }
-      }
-      if (fn) {
-        window.__SUPABASE_CLIENT__ = fn(
-          "https://osjevsltrfcvflhxrvgc.supabase.co",
-          "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9zamV2c2x0cmZjdmZsaHhydmdjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2MTcyODAsImV4cCI6MjA4ODE5MzI4MH0.NZFyz81Kh9kPfBx6suAbHSCrym-ruCfH8u32riAj51I"
-        );
-        console.log("Supabase connected!", window.__SUPABASE_CLIENT__);
-      } else {
-        console.error("createClient not found. Keys:", Object.keys(sb));
-      }
-    } catch(e) { console.error("Supabase init error:", e); }
+        return _origFetch.apply(this, arguments);
+      };
+    })();
+    console.log("[INIT] Supabase JS client removed. All DB via direct fetch. Fetch monitor active.");
   </script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
   <script type="text/babel">
-    const { useState, useCallback, useEffect, useRef } = React;
+    const { useState, useCallback, useEffect, useRef, useMemo } = React;
     const XLSX = window.XLSX;
     const supabase = window.__SUPABASE_CLIENT__;
 
@@ -109,8 +98,8 @@ const PTA_CRITERIA = [
   { id: "begruendung", label: "Begr\u00fcndung", type: "text" },
   { id: "partnerprogramm", label: "Teil einer Partnerprogrammapotheke?", type: "yesno", readonly: true },
   { id: "pta_family", label: "Teil PTA Family?", type: "yesno", readonly: true },
-  { id: "expertenzirkel", label: "Teilnahme am Perenterol Expertenzirkel?", type: "yesno" },
-  { id: "einkauf", label: "Zust\u00e4ndig f\u00fcr Einkauf?", type: "yesno" },
+  { id: "expertenzirkel", label: "Teilnahme am Perenterol Expertenzirkel?", type: "yesnodk" },
+  { id: "einkauf", label: "Zust\u00e4ndig f\u00fcr Einkauf?", type: "yesnodk" },
   { id: "rolle", label: "Besondere Rolle in der Apotheke?", type: "text" },
   { id: "zusatzinfo", label: "Zusatzinfo", type: "text" },
   { id: "entscheidung", label: "Entscheidung", type: "decision" },
@@ -120,7 +109,7 @@ const APO_CRITERIA = [
   { id: "aufgefallen", label: "Ist uns aufgefallen?", type: "yesno" },
   { id: "wie_aufgefallen", label: "Wenn aufgefallen?", type: "posneg" },
   { id: "begruendung", label: "Begr\u00fcndung", type: "text" },
-  { id: "expertenzirkel", label: "Teilnahme am Perenterol Expertenzirkel?", type: "yesno" },
+  { id: "expertenzirkel", label: "Teilnahme am Perenterol Expertenzirkel?", type: "yesnodk" },
   { id: "partnerprogramm", label: "Teil des Partnerprogramms?", type: "yesno", readonly: true },
   { id: "zusatzinfo", label: "Zusatzinfo", type: "text" },
   { id: "entscheidung", label: "Entscheidung", type: "decision" },
@@ -223,20 +212,6 @@ function Sidebar({ participants, evaluations, currentIdx, onSelect, tbdAssignmen
     <div style={{ width: 300, minWidth: 300, background: "#fff", borderRight: "1px solid #E5E7EB", overflowY: "auto", display: "flex", flexDirection: "column" }}>
       <div style={{ padding: "16px 14px 10px", borderBottom: "1px solid #E5E7EB", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <span style={{ fontFamily: "Trebuchet MS, sans-serif", fontSize: 11, fontWeight: 700, color: PETROL, textTransform: "uppercase", letterSpacing: 1.5 }}>Teilnehmer ({participants.length})</span>
-        <div style={{ display: "flex", gap: 4 }}>
-          <button onClick={onAdd} title="Teilnehmer hinzuf\u00fcgen" style={{
-            width: 24, height: 24, borderRadius: 4, border: "1px solid #D1D5DB",
-            background: "#fff", color: PETROL, fontSize: 16, fontWeight: 700,
-            cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0
-          }}>+</button>
-          {participants.length > 1 && (
-            <button onClick={onRemove} title="Letzten Teilnehmer entfernen" style={{
-              width: 24, height: 24, borderRadius: 4, border: "1px solid #EF444440",
-              background: "#fff", color: "#EF4444", fontSize: 16, fontWeight: 700,
-              cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0
-            }}>{"\u2212"}</button>
-          )}
-        </div>
       </div>
       <div style={{ flex: 1, overflowY: "auto" }}>
       {participants.map((p, i) => {
@@ -249,8 +224,8 @@ function Sidebar({ participants, evaluations, currentIdx, onSelect, tbdAssignmen
         const sidebarName = tbdName ? tbdName.name : p.name;
         const photoSrc = (program === "apo") ? getApoPhoto(p.key, tbdAssignments) : PHOTOS[p.key];
         return (
-          <div key={p.key + i} onClick={() => onSelect(i)} style={{
-            display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", cursor: "pointer",
+          <div key={p.key + i} style={{
+            display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", cursor: "default",
             borderLeft: act ? "3px solid " + PETROL : "3px solid transparent",
             background: act ? "#EFF9FA" : "transparent"
           }}>
@@ -292,7 +267,7 @@ function Sidebar({ participants, evaluations, currentIdx, onSelect, tbdAssignmen
   );
 }
 
-function YesNo({ value, onChange, label, disabled }) {
+const YesNo = React.memo(function YesNo({ value, onChange, label, disabled }) {
   return (
     <div style={{ marginBottom: 16 }}>
       <div style={{ fontFamily: "Trebuchet MS, sans-serif", fontSize: 13, fontWeight: 600, color: BLACK, marginBottom: 6 }}>
@@ -313,28 +288,53 @@ function YesNo({ value, onChange, label, disabled }) {
       </div>
     </div>
   );
-}
+});
 
-function PosNeg({ value, onChange, label }) {
+const YesNoDk = React.memo(function YesNoDk({ value, onChange, label }) {
   return (
     <div style={{ marginBottom: 16 }}>
-      <div style={{ fontFamily: "Trebuchet MS, sans-serif", fontSize: 13, fontWeight: 600, color: BLACK, marginBottom: 6 }}>{label}</div>
+      <div style={{ fontFamily: "Trebuchet MS, sans-serif", fontSize: 13, fontWeight: 600, color: BLACK, marginBottom: 6 }}>
+        {label}
+      </div>
       <div style={{ display: "flex", gap: 8 }}>
-        {["Positiv", "Weniger positiv"].map(o => (
+        {["Ja", "Nein", "Wei\u00df nicht"].map(o => (
           <button key={o} onClick={() => onChange(o)} style={{
-            padding: "6px 16px", borderRadius: 6, border: "1.5px solid",
-            borderColor: value === o ? (o === "Positiv" ? "#10B981" : ORANGE) : "#D1D5DB",
-            background: value === o ? (o === "Positiv" ? "#10B981" : ORANGE) : "#fff",
+            padding: "6px 22px", borderRadius: 6, border: "1.5px solid",
+            borderColor: value === o ? PETROL : "#D1D5DB",
+            background: value === o ? PETROL : "#fff",
             color: value === o ? "#fff" : BLACK,
-            fontFamily: "Trebuchet MS, sans-serif", fontSize: 13, fontWeight: value === o ? 600 : 400, cursor: "pointer"
+            fontFamily: "Trebuchet MS, sans-serif", fontSize: 13, fontWeight: value === o ? 600 : 400,
+            cursor: "pointer"
           }}>{o}</button>
         ))}
       </div>
     </div>
   );
-}
+});
 
-function Dreistufig({ value, onChange, label }) {
+const PosNeg = React.memo(function PosNeg({ value, onChange, label }) {
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <div style={{ fontFamily: "Trebuchet MS, sans-serif", fontSize: 13, fontWeight: 600, color: BLACK, marginBottom: 6 }}>{label}</div>
+      <div style={{ display: "flex", gap: 8 }}>
+        {["Positiv", "Weder noch", "Weniger positiv"].map(o => {
+          const col = o === "Positiv" ? "#10B981" : o === "Weniger positiv" ? ORANGE : "#6B7280";
+          return (
+            <button key={o} onClick={() => onChange(o)} style={{
+              padding: "6px 16px", borderRadius: 6, border: "1.5px solid",
+              borderColor: value === o ? col : "#D1D5DB",
+              background: value === o ? col : "#fff",
+              color: value === o ? "#fff" : BLACK,
+              fontFamily: "Trebuchet MS, sans-serif", fontSize: 13, fontWeight: value === o ? 600 : 400, cursor: "pointer"
+            }}>{o}</button>
+          );
+        })}
+      </div>
+    </div>
+  );
+});
+
+const Dreistufig = React.memo(function Dreistufig({ value, onChange, label }) {
   return (
     <div style={{ marginBottom: 16 }}>
       <div style={{ fontFamily: "Trebuchet MS, sans-serif", fontSize: 13, fontWeight: 600, color: BLACK, marginBottom: 6 }}>{label}</div>
@@ -354,20 +354,39 @@ function Dreistufig({ value, onChange, label }) {
       </div>
     </div>
   );
-}
+});
 
-function TextInput({ value, onChange, label }) {
+const TextInput = React.memo(function TextInput({ value, onChange, label }) {
+  const [localValue, setLocalValue] = useState(value || "");
+  const latestParentValue = useRef(value);
+  const isFocused = useRef(false);
+  // Only sync from parent if genuinely changed AND user is NOT currently editing
+  useEffect(() => {
+    if (value !== latestParentValue.current && !isFocused.current) {
+      setLocalValue(value || "");
+      latestParentValue.current = value;
+    }
+  }, [value]);
+  // No debounce — propagate to parent immediately on every keystroke
+  // The parent's save effect has its own 200ms debounce, so this is safe
+  const handleChange = (e) => {
+    const val = e.target.value;
+    setLocalValue(val);
+    latestParentValue.current = val;
+    if (onChange) onChange(val);
+  };
   return (
     <div style={{ marginBottom: 16 }}>
       <div style={{ fontFamily: "Trebuchet MS, sans-serif", fontSize: 13, fontWeight: 600, color: BLACK, marginBottom: 6 }}>{label}</div>
-      <textarea value={value || ""} onChange={e => onChange(e.target.value)} rows={2} placeholder="Hier eingeben..."
+      <textarea value={localValue} onChange={handleChange} rows={2} placeholder="Hier eingeben..."
         style={{ width: "100%", padding: "8px 12px", borderRadius: 6, border: "1.5px solid #D1D5DB", fontFamily: "Trebuchet MS, sans-serif", fontSize: 13, resize: "vertical", outline: "none", boxSizing: "border-box" }}
-        onFocus={e => { e.target.style.borderColor = PETROL; }} onBlur={e => { e.target.style.borderColor = "#D1D5DB"; }} />
+        onFocus={e => { e.target.style.borderColor = PETROL; isFocused.current = true; }}
+        onBlur={e => { e.target.style.borderColor = "#D1D5DB"; isFocused.current = false; latestParentValue.current = localValue; }} />
     </div>
   );
-}
+});
 
-function Decision({ value, onChange }) {
+const Decision = React.memo(function Decision({ value, onChange }) {
   return (
     <div style={{ marginTop: 20, paddingTop: 18, borderTop: "2px solid #E5E7EB" }}>
       <div style={{ fontFamily: "Trebuchet MS, sans-serif", fontSize: 15, fontWeight: 700, color: BLACK, marginBottom: 12 }}>Entscheidung</div>
@@ -389,26 +408,60 @@ function Decision({ value, onChange }) {
       </div>
     </div>
   );
-}
+});
 
-function EvalForm({ evaluation, onUpdate, criteria }) {
-  const up = (f, v) => onUpdate({ ...evaluation, [f]: v });
+const EvalForm = React.memo(function EvalForm({ evaluation, onUpdate, criteria }) {
+  const ev = evaluation || {};
+  const evRef = useRef(ev);
+  evRef.current = ev;
+
+  // Stable callbacks: use ref so they never change identity → children never re-render unnecessarily
+  const handleButtonChange = useCallback((fieldId, value) => {
+    onUpdate({ ...evRef.current, [fieldId]: value });
+  }, [onUpdate]);
+
+  const handleTextChange = useCallback((fieldId, value) => {
+    const oldVal = evRef.current[fieldId];
+    console.log("[EvalForm] handleTextChange:", fieldId, "old:", oldVal, "new:", value, "changed:", oldVal !== value);
+    if (oldVal !== value) {
+      const updated = { ...evRef.current, [fieldId]: value };
+      console.log("[EvalForm] calling onUpdate with keys:", Object.keys(updated));
+      onUpdate(updated);
+    }
+  }, [onUpdate]);
+
+  // Stable per-field callbacks (memoized by field id)
+  const callbackCache = useRef({});
+  const getButtonCb = useCallback((fieldId) => {
+    if (!callbackCache.current["btn_" + fieldId]) {
+      callbackCache.current["btn_" + fieldId] = (v) => handleButtonChange(fieldId, v);
+    }
+    return callbackCache.current["btn_" + fieldId];
+  }, [handleButtonChange]);
+  const getTextCb = useCallback((fieldId) => {
+    if (!callbackCache.current["txt_" + fieldId]) {
+      callbackCache.current["txt_" + fieldId] = (v) => handleTextChange(fieldId, v);
+    }
+    return callbackCache.current["txt_" + fieldId];
+  }, [handleTextChange]);
+
   const fields = criteria || PTA_CRITERIA;
   return (
     <div>
       {fields.map(c => {
-        if (c.type === "yesno") return <YesNo key={c.id} label={c.label} value={evaluation[c.id]} onChange={v => up(c.id, v)} disabled={c.readonly} />;
-        if (c.type === "posneg") return <PosNeg key={c.id} label={c.label} value={evaluation[c.id]} onChange={v => up(c.id, v)} />;
-        if (c.type === "text") return <TextInput key={c.id} label={c.label} value={evaluation[c.id]} onChange={v => up(c.id, v)} />;
-        if (c.type === "dreistufig") return <Dreistufig key={c.id} label={c.label} value={evaluation[c.id]} onChange={v => up(c.id, v)} />;
-        if (c.type === "decision") return <Decision key={c.id} value={evaluation[c.id]} onChange={v => up(c.id, v)} />;
+        if (c.type === "yesno") return <YesNo key={c.id} label={c.label} value={ev[c.id]} onChange={getButtonCb(c.id)} disabled={c.readonly} />;
+        if (c.type === "yesnodk") return <YesNoDk key={c.id} label={c.label} value={ev[c.id]} onChange={getButtonCb(c.id)} />;
+        if (c.type === "posneg") return <PosNeg key={c.id} label={c.label} value={ev[c.id]} onChange={getButtonCb(c.id)} />;
+        if (c.type === "text") return <TextInput key={c.id} label={c.label} value={ev[c.id]} onChange={getTextCb(c.id)} />;
+        if (c.type === "dreistufig") return <Dreistufig key={c.id} label={c.label} value={ev[c.id]} onChange={getButtonCb(c.id)} />;
+        if (c.type === "decision") return <Decision key={c.id} value={ev[c.id]} onChange={getButtonCb(c.id)} />;
         return null;
       })}
     </div>
   );
-}
+});
 
-function TbdNameInput({ participantKey, currentName, onAssign, participants, tbdAssignments }) {
+const TbdNameInput = React.memo(function TbdNameInput({ participantKey, currentName, onAssign, participants, tbdAssignments }) {
   const [inputVal, setInputVal] = useState("");
   const [suggestions, setSuggestions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -422,7 +475,7 @@ function TbdNameInput({ participantKey, currentName, onAssign, participants, tbd
     .map(([, data]) => data.name.toLowerCase());
   const allTakenNames = [...existingNames, ...assignedTbdNames];
 
-  const handleInput = (val) => {
+  const handleInput = useCallback((val) => {
     setInputVal(val);
     if (val.trim().length < 1) {
       setSuggestions([]);
@@ -437,9 +490,9 @@ function TbdNameInput({ participantKey, currentName, onAssign, participants, tbd
     });
     setSuggestions(matches);
     setShowSuggestions(matches.length > 0);
-  };
+  }, [allTakenNames]);
 
-  const selectPerson = (person) => {
+  const selectPerson = useCallback((person) => {
     const fullName = person.vorname + " " + person.nachname;
     setInputVal(fullName);
     setAssigned(person);
@@ -454,14 +507,14 @@ function TbdNameInput({ participantKey, currentName, onAssign, participants, tbd
       kooperation: person.kooperation,
       adm: person.adm
     });
-  };
+  }, [onAssign]);
 
-  const clearAssignment = () => {
+  const clearAssignment = useCallback(() => {
     setInputVal("");
     setAssigned(null);
     setSuggestions([]);
     onAssign(null);
-  };
+  }, [onAssign]);
 
   return (
     <div style={{ marginBottom: 16, padding: "12px 16px", background: "#FFFBEB", borderRadius: 8, border: "1.5px dashed " + ORANGE }}>
@@ -531,9 +584,9 @@ function TbdNameInput({ participantKey, currentName, onAssign, participants, tbd
       )}
     </div>
   );
-}
+});
 
-function ApoNameInput({ onAssign, initialData, apoAssignments, participantKey }) {
+const ApoNameInput = React.memo(function ApoNameInput({ onAssign, initialData, apoAssignments, participantKey }) {
   const [vorname, setVorname] = useState(initialData ? initialData.name.split(" ")[0] : "");
   const [nachname, setNachname] = useState(initialData ? initialData.name.split(" ").slice(1).join(" ") : "");
   const [apotheke, setApotheke] = useState(initialData ? initialData.apotheke : "");
@@ -552,7 +605,7 @@ function ApoNameInput({ onAssign, initialData, apoAssignments, participantKey })
 
   const [extraData, setExtraData] = useState(null);
 
-  const handleSuggestionClick = (s) => {
+  const handleSuggestionClick = useCallback((s) => {
     setVorname(s.vorname);
     setNachname(s.nachname);
     setApotheke(s.apotheke);
@@ -563,28 +616,28 @@ function ApoNameInput({ onAssign, initialData, apoAssignments, participantKey })
     onAssign({ name: fullName, apotheke: s.apotheke.trim(), ort: extra.ort, plz: extra.plz, partner: extra.partner, kooperation: extra.kooperation, adm: extra.adm });
     setSaved(true);
     setShowSuggestions(false);
-  };
+  }, [onAssign]);
 
-  const handleSave = () => {
+  const handleSave = useCallback(() => {
     if (!vorname.trim()) return;
     const fullName = (vorname.trim() + " " + nachname.trim()).trim();
     const extra = extraData || { ort: "", plz: "", partner: false, kooperation: "", adm: "" };
     onAssign({ name: fullName, apotheke: apotheke.trim(), ort: extra.ort, plz: extra.plz, partner: extra.partner, kooperation: extra.kooperation, adm: extra.adm });
     setSaved(true);
     setShowSuggestions(false);
-  };
+  }, [vorname, nachname, apotheke, extraData, onAssign]);
 
-  const handleEdit = () => {
+  const handleEdit = useCallback(() => {
     setSaved(false);
     setShowSuggestions(true);
-  };
+  }, []);
 
-  const handleClear = () => {
+  const handleClear = useCallback(() => {
     setVorname(""); setNachname(""); setApotheke("");
     setSaved(false);
     setShowSuggestions(true);
     onAssign(null);
-  };
+  }, [onAssign]);
 
   const inputStyle = {
     width: "100%", padding: "7px 10px", borderRadius: 6, border: "1.5px solid #D1D5DB",
@@ -690,11 +743,11 @@ function ApoNameInput({ onAssign, initialData, apoAssignments, participantKey })
       )}
     </div>
   );
-}
+});
 
 const APP_PASSWORD = "soundingboard2026";
 
-function GroupPhotoOverlay({ src, onClose }) {
+const GroupPhotoOverlay = React.memo(function GroupPhotoOverlay({ src, onClose }) {
   const [zoom, setZoom] = useState(1);
   const [pos, setPos] = useState({x: 0, y: 0});
   const [drag, setDrag] = useState(null);
@@ -772,7 +825,7 @@ function GroupPhotoOverlay({ src, onClose }) {
       </div>
     </div>
   );
-}
+});
 
 function PasswordScreen({ onUnlock }) {
   const [pw, setPw] = useState("");
@@ -950,7 +1003,7 @@ function EmailScreen({ onSubmit }) {
   );
 }
 
-function Summary({ participants, evaluations, tbdAssignments, participantInfo, program, onSwitchToApo, allEvals, allParticipants, sessionMode, userEmail }) {
+function Summary({ participants, evaluations, tbdAssignments, participantInfo, program, onSwitchToApo, allEvals, allParticipants, sessionMode, userEmail, onBack, onAuswertung }) {
   const invite = participants.filter(p => evaluations[p.key]?.entscheidung === "einladen");
   const reject = participants.filter(p => evaluations[p.key]?.entscheidung === "nicht_einladen");
   const open = participants.filter(p => !evaluations[p.key]?.entscheidung);
@@ -1093,7 +1146,14 @@ function Summary({ participants, evaluations, tbdAssignments, participantInfo, p
   return (
     <div style={{ padding: 32 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24, flexWrap: "wrap", gap: 10 }}>
-        <div>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          {onBack && (
+            <button onClick={onBack} style={{
+              padding: "6px 14px", borderRadius: 6, border: "1.5px solid #D1D5DB",
+              background: "#fff", color: BLACK, fontFamily: "Trebuchet MS, sans-serif",
+              fontSize: 13, fontWeight: 600, cursor: "pointer"
+            }}>{"\u2190"} Zur{"\u00fc"}ck</button>
+          )}
           <h2 style={{ fontFamily: "Trebuchet MS, sans-serif", fontSize: 20, fontWeight: 700, color: program === "apo" ? ORANGE : PETROL, margin: 0 }}>
             {program === "apo" ? "Apo Think!" : "PTA Think!"} {"\u2013"} Deine Auswahl
           </h2>
@@ -1103,24 +1163,11 @@ function Summary({ participants, evaluations, tbdAssignments, participantInfo, p
             </div>
           )}
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          <button onClick={downloadExcel} style={{ padding: "8px 18px", borderRadius: 6, border: "none", background: ORANGE, color: "#fff", fontFamily: "Trebuchet MS, sans-serif", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
-            Excel herunterladen
-          </button>
-          {program === "apo" && allEvals && (
-            <button onClick={downloadCombinedExcel} style={{ padding: "8px 18px", borderRadius: 6, border: "1.5px solid " + PETROL, background: "#fff", color: PETROL, fontFamily: "Trebuchet MS, sans-serif", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
-              Gesamt-Excel (beide)
-            </button>
-          )}
-        </div>
       </div>
-      <Group title="Einladen" items={invite} color="#059669" icon={"\u2713"} />
-      <Group title="Nicht einladen" items={reject} color="#DC2626" icon={"\u2717"} />
-      <Group title="Noch offen" items={open} color="#9CA3AF" icon={"\u25CB"} />
 
-      {/* Flow navigation */}
+      {/* PTA: Weiter zu Apo Think */}
       {program === "pta" && onSwitchToApo && (
-        <div style={{ marginTop: 32, padding: "20px 24px", background: "#FFF8EE", borderRadius: 12, border: "1.5px solid " + ORANGE + "40", textAlign: "center" }}>
+        <div style={{ marginBottom: 24, padding: "20px 24px", background: "#FFF8EE", borderRadius: 12, border: "1.5px solid " + ORANGE + "40", textAlign: "center" }}>
           <div style={{ fontFamily: "Trebuchet MS, sans-serif", fontSize: 15, fontWeight: 600, color: BLACK, marginBottom: 8 }}>
             PTA Think! Auswahl abgeschlossen?
           </div>
@@ -1134,6 +1181,27 @@ function Summary({ participants, evaluations, tbdAssignments, participantInfo, p
           }}>Weiter zu Apo Think! {"\u2192"}</button>
         </div>
       )}
+
+      {/* Apo: Hinweis auf Auswertung */}
+      {program === "apo" && onAuswertung && (
+        <div style={{ marginBottom: 24, padding: "20px 24px", background: "#EFF9FA", borderRadius: 12, border: "1.5px solid " + PETROL + "40", textAlign: "center" }}>
+          <div style={{ fontFamily: "Trebuchet MS, sans-serif", fontSize: 15, fontWeight: 600, color: BLACK, marginBottom: 8 }}>
+            Apo Think! Auswahl abgeschlossen?
+          </div>
+          <div style={{ fontFamily: "Trebuchet MS, sans-serif", fontSize: 13, color: "#6B7280", marginBottom: 16 }}>
+            Vergleiche jetzt die Bewertungen beider Teams in der Auswertung
+          </div>
+          <button onClick={onAuswertung} style={{
+            padding: "12px 32px", borderRadius: 8, border: "none",
+            background: PETROL, color: "#fff", fontFamily: "Trebuchet MS, sans-serif",
+            fontSize: 15, fontWeight: 700, cursor: "pointer"
+          }}>Zur Auswertung {"\u2192"}</button>
+        </div>
+      )}
+
+      <Group title="Einladen" items={invite} color="#059669" icon={"\u2713"} />
+      <Group title="Nicht einladen" items={reject} color="#DC2626" icon={"\u2717"} />
+      <Group title="Noch offen" items={open} color="#9CA3AF" icon={"\u25CB"} />
     </div>
   );
 }
@@ -1153,17 +1221,23 @@ function Auswertung({ onBack, ptaParticipants, apoParticipants, apoAssignments, 
   const [hopfEmail, setHopfEmail] = useState(TEAM_HOPF_EMAIL || "");
   const [mediceEmail, setMediceEmail] = useState(TEAM_MEDICE_EMAIL || "");
   const [emailsSet, setEmailsSet] = useState(!!TEAM_HOPF_EMAIL && !!TEAM_MEDICE_EMAIL);
+  const [expandedKey, setExpandedKey] = useState(null);
 
   const loadTeamData = async (hEmail, mEmail) => {
     if (!supabase || !hEmail || !mEmail) return;
     setLoading(true);
     try {
-      const [hopfRes, mediceRes] = await Promise.all([
-        supabase.from("soundingboard").select("data").eq("id", "user_" + hEmail).single(),
-        supabase.from("soundingboard").select("data").eq("id", "user_" + mEmail).single()
+      const SUPA_URL = "https://osjevsltrfcvflhxrvgc.supabase.co";
+      const SUPA_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9zamV2c2x0cmZjdmZsaHhydmdjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2MTcyODAsImV4cCI6MjA4ODE5MzI4MH0.NZFyz81Kh9kPfBx6suAbHSCrym-ruCfH8u32riAj51I";
+      const hdrs = { "apikey": SUPA_KEY, "Authorization": "Bearer " + SUPA_KEY };
+      const [hopfResp, mediceResp] = await Promise.all([
+        fetch(SUPA_URL + "/rest/v1/soundingboard?id=eq.user_" + encodeURIComponent(hEmail) + "&select=data", { headers: hdrs }),
+        fetch(SUPA_URL + "/rest/v1/soundingboard?id=eq.user_" + encodeURIComponent(mEmail) + "&select=data", { headers: hdrs })
       ]);
-      setHopfData(hopfRes.data?.data || null);
-      setMediceData(mediceRes.data?.data || null);
+      const hopfRows = await hopfResp.json();
+      const mediceRows = await mediceResp.json();
+      setHopfData(hopfRows[0]?.data || null);
+      setMediceData(mediceRows[0]?.data || null);
     } catch(e) { console.error("Auswertung load error:", e); }
     setLoading(false);
   };
@@ -1189,6 +1263,46 @@ function Auswertung({ onBack, ptaParticipants, apoParticipants, apoAssignments, 
   const hopfEvals = hopfData ? (activeTab === "pta" ? hopfData.evals : hopfData.apoEvals) || {} : {};
   const mediceEvals = mediceData ? (activeTab === "pta" ? mediceData.evals : mediceData.apoEvals) || {} : {};
   const assignments = activeTab === "pta" ? tbdAssignments : apoAssignments;
+
+  const downloadAuswertungExcel = () => {
+    const wb = XLSX.utils.book_new();
+    const buildSheet = (tabParticipants, tabAssignments, hEvals, mEvals, tabCriteria, sheetName) => {
+      const critIds = tabCriteria.filter(c => c.id !== "entscheidung");
+      // Headers
+      const headers = ["Name", "Apotheke", "Ort"];
+      critIds.forEach(c => { headers.push("Hopf: " + c.label); headers.push("Medice: " + c.label); });
+      headers.push("Hopf: Entscheidung", "Medice: Entscheidung", "Finale Entscheidung");
+      // Rows
+      const rows = tabParticipants.map(p => {
+        const a = tabAssignments[p.key] || {};
+        const name = a.name || p.name;
+        const pInfo = sheetName.indexOf("Apo") >= 0 ? (APO_PARTICIPANT_INFO[p.key] || {}) : (PARTICIPANT_INFO[p.key] || {});
+        const hE = hEvals[p.key] || {};
+        const mE = mEvals[p.key] || {};
+        const row = [name, pInfo.apotheke || "", pInfo.ort || ""];
+        critIds.forEach(c => {
+          var hV = hE[c.id]; if (hV === true) hV = "Ja"; if (hV === false) hV = "Nein";
+          var mV = mE[c.id]; if (mV === true) mV = "Ja"; if (mV === false) mV = "Nein";
+          row.push(hV || ""); row.push(mV || "");
+        });
+        const hDec = hE.entscheidung === "einladen" ? "Einladen" : hE.entscheidung === "nicht_einladen" ? "Nicht einladen" : "Offen";
+        const mDec = mE.entscheidung === "einladen" ? "Einladen" : mE.entscheidung === "nicht_einladen" ? "Nicht einladen" : "Offen";
+        var finale = "Offen";
+        if (hE.entscheidung && hE.entscheidung === mE.entscheidung) finale = hDec;
+        else if (hE.entscheidung && mE.entscheidung && hE.entscheidung !== mE.entscheidung) finale = "Uneinig";
+        row.push(hDec, mDec, finale);
+        return row;
+      });
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([headers, ...rows]), sheetName);
+    };
+    const ptaHEvals = hopfData ? (hopfData.evals || {}) : {};
+    const ptaMEvals = mediceData ? (mediceData.evals || {}) : {};
+    const apoHEvals = hopfData ? (hopfData.apoEvals || {}) : {};
+    const apoMEvals = mediceData ? (mediceData.apoEvals || {}) : {};
+    buildSheet(ptaParticipants, tbdAssignments, ptaHEvals, ptaMEvals, PTA_CRITERIA, "PTA Think! Auswertung");
+    buildSheet(apoParticipants, apoAssignments, apoHEvals, apoMEvals, APO_CRITERIA, "Apo Think! Auswertung");
+    XLSX.writeFile(wb, "Soundingboard_Auswertung_Final.xlsx");
+  };
 
   const tabStyle = (active) => ({
     flex: 1, padding: "10px 0", borderRadius: 8, border: "none",
@@ -1270,6 +1384,10 @@ function Auswertung({ onBack, ptaParticipants, apoParticipants, apoAssignments, 
                 padding: "4px 12px", borderRadius: 6, border: "1px solid #D1D5DB", background: "#fff",
                 fontFamily: "Trebuchet MS, sans-serif", fontSize: 12, cursor: "pointer", color: "#6B7280"
               }}>E-Mails {"\u00e4"}ndern</button>
+              <button onClick={downloadAuswertungExcel} style={{
+                padding: "5px 14px", borderRadius: 6, border: "none", background: ORANGE, color: "#fff",
+                fontFamily: "Trebuchet MS, sans-serif", fontSize: 12, fontWeight: 600, cursor: "pointer"
+              }}>Excel Auswertung herunterladen</button>
             </div>
 
             {loading ? (
@@ -1348,8 +1466,25 @@ function Auswertung({ onBack, ptaParticipants, apoParticipants, apoAssignments, 
                   var hParts = buildEvalLine(hEval);
                   var mParts = buildEvalLine(mEval);
 
+                  var isExpanded = expandedKey === p.key;
+
+                  // Detail row builder
+                  var buildDetailRow = function(label, hVal, mVal) {
+                    var fmt = function(v) {
+                      if (!v && v !== false) return "\u2013";
+                      if (v === true) return "Ja";
+                      if (v === false) return "Nein";
+                      return String(v);
+                    };
+                    var hF = fmt(hVal), mF = fmt(mVal);
+                    var same = hF === mF && hF !== "\u2013";
+                    var bothEmpty = hF === "\u2013" && mF === "\u2013";
+                    return { label: label, h: hF, m: mF, same: same, bothEmpty: bothEmpty };
+                  };
+
                   return (
-                    <div key={p.key} style={{ display: "grid", gridTemplateColumns: "240px 1fr 1fr 100px", gap: 0, background: i % 2 === 0 ? "#fff" : "#FAFBFC", border: "1px solid #E5E7EB", borderTop: "none" }}>
+                    <React.Fragment key={p.key}>
+                    <div onClick={function() { setExpandedKey(isExpanded ? null : p.key); }} style={{ display: "grid", gridTemplateColumns: "240px 1fr 1fr 100px", gap: 0, background: isExpanded ? "#F0F9FF" : (i % 2 === 0 ? "#fff" : "#FAFBFC"), border: "1px solid #E5E7EB", borderTop: "none", cursor: "pointer", transition: "background 0.15s" }}>
                       {/* Name col */}
                       <div style={{ padding: "8px 12px", display: "flex", alignItems: "center", gap: 8 }}>
                         <div style={{ width: 36, height: 36, borderRadius: "50%", overflow: "hidden", flexShrink: 0, background: "#F3F4F6", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -1361,13 +1496,14 @@ function Auswertung({ onBack, ptaParticipants, apoParticipants, apoAssignments, 
                             {[pInfo.apotheke, pInfo.ort].filter(Boolean).join(", ")}
                           </div>
                         </div>
+                        <span style={{ marginLeft: "auto", fontSize: 10, color: "#9CA3AF" }}>{isExpanded ? "\u25B2" : "\u25BC"}</span>
                       </div>
                       {/* Hopf col */}
                       <div style={{ padding: "6px 10px", borderLeft: "1px solid #E5E7EB" }}>
                         <div style={{ marginBottom: 3 }}>
                           <span style={{ display: "inline-block", padding: "1px 8px", borderRadius: 4, background: hDec.bg, color: hDec.color, fontFamily: "Trebuchet MS, sans-serif", fontSize: 10, fontWeight: 600 }}>{hDec.icon} {hDec.label}</span>
                         </div>
-                        <div style={{ display: "flex", flexWrap: "wrap", gap: "2px 6px" }}>
+                        {!isExpanded && <div style={{ display: "flex", flexWrap: "wrap", gap: "2px 6px" }}>
                           {hParts.map(function(pt) {
                             var isPos = pt.val === "Ja" || pt.val === "Positiv";
                             var isNeg = pt.val === "Nein" || pt.val === "Weniger positiv";
@@ -1379,14 +1515,14 @@ function Auswertung({ onBack, ptaParticipants, apoParticipants, apoAssignments, 
                             );
                           })}
                           {hParts.length === 0 && <span style={{ fontFamily: "Trebuchet MS, sans-serif", fontSize: 9, color: "#D1D5DB" }}>{"\u2013"} keine Bewertung</span>}
-                        </div>
+                        </div>}
                       </div>
                       {/* Medice col */}
                       <div style={{ padding: "6px 10px", borderLeft: "1px solid #E5E7EB" }}>
                         <div style={{ marginBottom: 3 }}>
                           <span style={{ display: "inline-block", padding: "1px 8px", borderRadius: 4, background: mDec.bg, color: mDec.color, fontFamily: "Trebuchet MS, sans-serif", fontSize: 10, fontWeight: 600 }}>{mDec.icon} {mDec.label}</span>
                         </div>
-                        <div style={{ display: "flex", flexWrap: "wrap", gap: "2px 6px" }}>
+                        {!isExpanded && <div style={{ display: "flex", flexWrap: "wrap", gap: "2px 6px" }}>
                           {mParts.map(function(pt) {
                             var isPos = pt.val === "Ja" || pt.val === "Positiv";
                             var isNeg = pt.val === "Nein" || pt.val === "Weniger positiv";
@@ -1398,7 +1534,7 @@ function Auswertung({ onBack, ptaParticipants, apoParticipants, apoAssignments, 
                             );
                           })}
                           {mParts.length === 0 && <span style={{ fontFamily: "Trebuchet MS, sans-serif", fontSize: 9, color: "#D1D5DB" }}>{"\u2013"} keine Bewertung</span>}
-                        </div>
+                        </div>}
                       </div>
                       {/* Finale col */}
                       <div style={{ padding: "8px 6px", borderLeft: "1px solid #E5E7EB", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -1407,6 +1543,53 @@ function Auswertung({ onBack, ptaParticipants, apoParticipants, apoAssignments, 
                         </span>
                       </div>
                     </div>
+                    {/* Expanded detail view */}
+                    {isExpanded && (
+                      <div style={{ border: "1px solid #E5E7EB", borderTop: "none", background: "#F8FAFC", padding: "16px 20px" }}>
+                        <div style={{ display: "grid", gridTemplateColumns: "180px 1fr 1fr", gap: 0, borderRadius: 8, overflow: "hidden", border: "1px solid #E5E7EB" }}>
+                          {/* Header */}
+                          <div style={{ padding: "8px 12px", background: "#F3F4F6", fontFamily: "Trebuchet MS, sans-serif", fontSize: 11, fontWeight: 700, color: "#6B7280" }}>Kriterium</div>
+                          <div style={{ padding: "8px 12px", background: TEAM_HOPF.bg, fontFamily: "Trebuchet MS, sans-serif", fontSize: 11, fontWeight: 700, color: TEAM_HOPF.color, borderLeft: "1px solid #E5E7EB" }}>{TEAM_HOPF.label}</div>
+                          <div style={{ padding: "8px 12px", background: TEAM_MEDICE.bg, fontFamily: "Trebuchet MS, sans-serif", fontSize: 11, fontWeight: 700, color: TEAM_MEDICE.color, borderLeft: "1px solid #E5E7EB" }}>{TEAM_MEDICE.label}</div>
+                          {/* Detail rows */}
+                          {detailCriteria.map(function(c, ci) {
+                            var row = buildDetailRow(c.label, hEval[c.id], mEval[c.id]);
+                            if (row.bothEmpty) return null;
+                            var bgColor = ci % 2 === 0 ? "#fff" : "#FAFBFC";
+                            var valStyle = function(v) {
+                              var color = "#374151";
+                              if (v === "Ja" || v === "Positiv") color = "#059669";
+                              if (v === "Nein" || v === "Weniger positiv") color = "#DC2626";
+                              if (v === "\u2013") color = "#D1D5DB";
+                              return { padding: "6px 12px", fontFamily: "Trebuchet MS, sans-serif", fontSize: 12, color: color, borderLeft: "1px solid #E5E7EB", borderTop: "1px solid #E5E7EB", background: bgColor, wordBreak: "break-word" };
+                            };
+                            return (
+                              <React.Fragment key={c.id}>
+                                <div style={{ padding: "6px 12px", fontFamily: "Trebuchet MS, sans-serif", fontSize: 11, fontWeight: 600, color: "#6B7280", borderTop: "1px solid #E5E7EB", background: bgColor }}>{c.label}</div>
+                                <div style={valStyle(row.h)}>{row.h}</div>
+                                <div style={valStyle(row.m)}>{row.m}</div>
+                              </React.Fragment>
+                            );
+                          })}
+                          {/* Entscheidung row */}
+                          {(function() {
+                            var bgColor = detailCriteria.length % 2 === 0 ? "#fff" : "#FAFBFC";
+                            return (
+                              <React.Fragment>
+                                <div style={{ padding: "8px 12px", fontFamily: "Trebuchet MS, sans-serif", fontSize: 12, fontWeight: 700, color: "#374151", borderTop: "2px solid #E5E7EB", background: "#F9FAFB" }}>Entscheidung</div>
+                                <div style={{ padding: "8px 12px", borderLeft: "1px solid #E5E7EB", borderTop: "2px solid #E5E7EB", background: "#F9FAFB" }}>
+                                  <span style={{ padding: "2px 10px", borderRadius: 4, background: hDec.bg, color: hDec.color, fontFamily: "Trebuchet MS, sans-serif", fontSize: 12, fontWeight: 700 }}>{hDec.icon} {hDec.label}</span>
+                                </div>
+                                <div style={{ padding: "8px 12px", borderLeft: "1px solid #E5E7EB", borderTop: "2px solid #E5E7EB", background: "#F9FAFB" }}>
+                                  <span style={{ padding: "2px 10px", borderRadius: 4, background: mDec.bg, color: mDec.color, fontFamily: "Trebuchet MS, sans-serif", fontSize: 12, fontWeight: 700 }}>{mDec.icon} {mDec.label}</span>
+                                </div>
+                              </React.Fragment>
+                            );
+                          })()}
+                        </div>
+                      </div>
+                    )}
+                    </React.Fragment>
                   );
                 })}
               </div>
@@ -1434,13 +1617,29 @@ function App() {
     tbd1: { name: "Mareike Braach", apotheke: "Schloss Apo", ort: "Siegen", plz: "57072", partner: false, ptaFamily: false, kooperation: "Elac", adm: "Kristina Roth" }
   });
   const [apoAssignments, setApoAssignments] = useState({});
-  const [syncStatus, setSyncStatus] = useState("loading");
+  const syncStatusRef = useRef("loading");
+  const syncIndicatorRef = useRef(null);
   const [sessionMode, setSessionMode] = useState(null); // always "individual"
   const [userEmail, setUserEmail] = useState(null);
-  const skipNextSync = useRef(false);
+  const dataLoadedAt = useRef(0);
   const saveTimer = useRef(null);
   const channelRef = useRef(null);
   const lastSaveTime = useRef(0);
+
+  // Update sync status display WITHOUT causing React re-renders (prevents button flickering)
+  const updateSyncStatus = useCallback((status) => {
+    syncStatusRef.current = status;
+    const el = syncIndicatorRef.current;
+    if (el) {
+      const dot = el.querySelector(".sync-dot");
+      const txt = el.querySelector(".sync-text");
+      const colors = { synced: "#10B981", saving: "#E8A317", error: "#EF4444", loading: "#9CA3AF" };
+      const labels = { synced: "Gespeichert", saving: "Speichert...", error: "Sync-Fehler", loading: "Laden..." };
+      if (dot) dot.style.background = colors[status] || "#9CA3AF";
+      if (txt) txt.textContent = labels[status] || "";
+      el.style.color = status === "error" ? "#EF4444" : "#9CA3AF";
+    }
+  }, []);
 
   const supabaseId = userEmail ? "user_" + userEmail : "main";
 
@@ -1448,109 +1647,209 @@ function App() {
   // --- LOAD: Always load assignments from "main", evals from own row ---
   useEffect(() => {
     if (!supabase || !sessionMode) return;
-    setSyncStatus("loading");
+    updateSyncStatus("loading");
+    dataLoadedAt.current = Date.now();
     const loadData = async () => {
+      const SUPA_URL = "https://osjevsltrfcvflhxrvgc.supabase.co";
+      const SUPA_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9zamV2c2x0cmZjdmZsaHhydmdjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2MTcyODAsImV4cCI6MjA4ODE5MzI4MH0.NZFyz81Kh9kPfBx6suAbHSCrym-ruCfH8u32riAj51I";
+      const hdrs = { "apikey": SUPA_KEY, "Authorization": "Bearer " + SUPA_KEY };
       try {
-        // 1) Always load shared assignments from "main"
-        console.log("Loading shared assignments from 'main'...");
-        const { data: mainData, error: mainErr } = await supabase.from("soundingboard").select("data").eq("id", "main").single();
-        if (mainErr && mainErr.code !== "PGRST116") console.error("Main load error:", mainErr);
-        if (mainData?.data) {
-          if (mainData.data.tbdAssignments) setTbdAssignments(mainData.data.tbdAssignments);
-          if (mainData.data.apoAssignments) setApoAssignments(mainData.data.apoAssignments);
-          if (mainData.data.apoParticipants && mainData.data.apoParticipants.length > 0) setApoParticipants(mainData.data.apoParticipants);
-          if (mainData.data.ptaParticipants && mainData.data.ptaParticipants.length > 0) setPtaParticipants(mainData.data.ptaParticipants);
-        }
+        // Reset state before loading to prevent stale data from previous user
+        setEvals({});
+        setApoEvals({});
 
-        // 2) Load evals from own row
-        console.log("Loading evals from '" + supabaseId + "'...");
-        const { data, error } = await supabase.from("soundingboard").select("data").eq("id", supabaseId).single();
-        if (error && error.code !== "PGRST116") { console.error("Eval load error:", error); }
-        if (data?.data) {
-          if (data.data.evals) setEvals(data.data.evals);
-          if (data.data.apoEvals) setApoEvals(data.data.apoEvals);
-          if (data.data.program) setProgram(data.data.program);
+        // 1) Load user row first (contains evals + assignments since main-PATCH fix)
+        console.log("[LOAD] Loading user data from '" + supabaseId + "' via direct fetch...");
+        const userResp = await fetch(SUPA_URL + "/rest/v1/soundingboard?id=eq." + encodeURIComponent(supabaseId) + "&select=data", { headers: hdrs });
+        const userRows = await userResp.json();
+        const userData = userRows && userRows[0] ? userRows[0] : null;
+        if (userData?.data) {
+          if (userData.data.evals) setEvals(userData.data.evals);
+          if (userData.data.apoEvals) setApoEvals(userData.data.apoEvals);
+          if (userData.data.program) setProgram(userData.data.program);
         }
-        skipNextSync.current = true;
-        setSyncStatus("synced");
-      } catch(e) { console.error("Supabase catch:", e); setSyncStatus("error"); }
+        console.log("[LOAD] User data loaded. evals keys:", userData?.data?.evals ? Object.keys(userData.data.evals).length : 0);
+
+        // 2) Load assignments: prefer user row, fallback to "main" row
+        const ud = userData?.data;
+        let assignmentsLoaded = false;
+        if (ud && (ud.tbdAssignments || ud.apoAssignments)) {
+          console.log("[LOAD] Loading assignments from USER row (new format)");
+          if (ud.tbdAssignments) setTbdAssignments(ud.tbdAssignments);
+          if (ud.apoAssignments) setApoAssignments(ud.apoAssignments);
+          if (ud.apoParticipants && ud.apoParticipants.length > 0) setApoParticipants(ud.apoParticipants);
+          if (ud.ptaParticipants && ud.ptaParticipants.length > 0) setPtaParticipants(ud.ptaParticipants);
+          assignmentsLoaded = true;
+        }
+        if (!assignmentsLoaded) {
+          // Fallback: load from "main" row (legacy data or first-time load)
+          console.log("[LOAD] No assignments in user row, falling back to 'main' row...");
+          const mainResp = await fetch(SUPA_URL + "/rest/v1/soundingboard?id=eq.main&select=data", { headers: hdrs });
+          const mainRows = await mainResp.json();
+          const mainData = mainRows && mainRows[0] ? mainRows[0] : null;
+          if (mainData?.data) {
+            if (mainData.data.tbdAssignments) setTbdAssignments(mainData.data.tbdAssignments);
+            if (mainData.data.apoAssignments) setApoAssignments(mainData.data.apoAssignments);
+            if (mainData.data.apoParticipants && mainData.data.apoParticipants.length > 0) setApoParticipants(mainData.data.apoParticipants);
+            if (mainData.data.ptaParticipants && mainData.data.ptaParticipants.length > 0) setPtaParticipants(mainData.data.ptaParticipants);
+          }
+        }
+        dataLoadedAt.current = Date.now();
+        updateSyncStatus("synced");
+      } catch(e) { console.error("Load catch:", e); updateSyncStatus("error"); }
     };
     loadData();
-
-    // --- REALTIME: Listen for assignment changes from "main" AND eval changes from own row ---
-    if (channelRef.current) { channelRef.current.forEach(ch => supabase.removeChannel(ch)); }
-    const channels = [];
-    try {
-      // Always listen to "main" for assignment changes
-      const mainChannel = supabase.channel("sb_main_assignments")
-        .on("postgres_changes", { event: "UPDATE", schema: "public", table: "soundingboard", filter: "id=eq.main" }, (payload) => {
-          const d = payload.new?.data;
-          if (!d) return;
-          // Ignore echoes from own save (within 2s)
-          if (Date.now() - lastSaveTime.current < 2000) return;
-          if (d.tbdAssignments) setTbdAssignments(d.tbdAssignments);
-          if (d.apoAssignments) setApoAssignments(d.apoAssignments);
-          if (d.apoParticipants && d.apoParticipants.length > 0) setApoParticipants(d.apoParticipants);
-          if (d.ptaParticipants && d.ptaParticipants.length > 0) setPtaParticipants(d.ptaParticipants);
-          setSyncStatus("synced");
-        })
-        .subscribe();
-      channels.push(mainChannel);
-
-      // Also listen to own row for eval sync across devices
-      {
-        const userChannel = supabase.channel("sb_" + supabaseId)
-          .on("postgres_changes", { event: "UPDATE", schema: "public", table: "soundingboard", filter: "id=eq." + supabaseId }, (payload) => {
-            const d = payload.new?.data;
-            if (!d) return;
-            if (Date.now() - lastSaveTime.current < 2000) return;
-            skipNextSync.current = true;
-            if (d.evals) setEvals(d.evals);
-            if (d.apoEvals) setApoEvals(d.apoEvals);
-            setSyncStatus("synced");
-          })
-          .subscribe();
-        channels.push(userChannel);
-      }
-
-      channelRef.current = channels;
-      return () => { channels.forEach(ch => supabase.removeChannel(ch)); channelRef.current = null; };
-    } catch(e) { console.error("Realtime error:", e); }
+    console.log("[REALTIME] Supabase JS client removed — no realtime, no hidden writes possible");
   }, [sessionMode, userEmail]);
 
-  // --- SAVE: Assignments always to "main", evals to own row ---
-  const skipAssignmentSync = useRef(false);
+  // Fix: Update sync indicator after DOM mount (ref may not be attached during initial load)
   useEffect(() => {
-    if (!supabase || !sessionMode || syncStatus === "loading") return;
-    if (skipNextSync.current) { skipNextSync.current = false; return; }
-    if (saveTimer.current) clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(async () => {
-      setSyncStatus("saving");
-      lastSaveTime.current = Date.now();
-      try {
-        // 1) Always save assignments to "main"
-        // First load current main data to merge
-        const { data: mainCurrent } = await supabase.from("soundingboard").select("data").eq("id", "main").single();
-        const mainSave = mainCurrent?.data ? { ...mainCurrent.data } : {};
-        mainSave.tbdAssignments = tbdAssignments;
-        mainSave.apoAssignments = apoAssignments;
-        mainSave.apoParticipants = apoParticipants;
-        mainSave.ptaParticipants = ptaParticipants;
-        const { error: mainErr } = await supabase.from("soundingboard").upsert({
-          id: "main", data: mainSave, updated_at: new Date().toISOString()
-        });
-        console.log("Save main:", mainErr ? "ERROR: " + mainErr.message : "OK");
-
-        // 2) Save evals to own row
-        const userSave = { evals, apoEvals, program, userEmail };
-        const { error: userErr } = await supabase.from("soundingboard").upsert({
-          id: supabaseId, data: userSave, updated_at: new Date().toISOString()
-        });
-        console.log("Save user (" + supabaseId + "):", userErr ? "ERROR: " + userErr.message : "OK");
-        setSyncStatus(mainErr || userErr ? "error" : "synced");
-      } catch(e) { console.error("Save catch:", e); setSyncStatus("error"); }
+    const t = setTimeout(() => {
+      if (syncIndicatorRef.current && syncStatusRef.current) {
+        updateSyncStatus(syncStatusRef.current);
+      }
     }, 500);
+    return () => clearTimeout(t);
+  }, [view]);
+
+  // --- SAVE: Everything to user row only (main-PATCH removed — caused 503 + data loss) ---
+  const pendingDataRef = useRef(null);
+  const isSaving = useRef(false);
+  const doSaveRef = useRef(null);
+
+  // Core save function — handles concurrent saves via retry
+  const doSave = useCallback(async (saveData) => {
+    if (!supabase || !sessionMode) return;
+    // If already saving, queue this data and return — it will be picked up after current save
+    if (isSaving.current) {
+      console.log("[doSave] Already saving, queuing data for retry");
+      pendingDataRef.current = saveData;
+      return;
+    }
+    isSaving.current = true;
+    updateSyncStatus("saving");
+    lastSaveTime.current = Date.now();
+    try {
+      const { _evals, _apoEvals, _program, _userEmail, _tbdAssignments, _apoAssignments, _apoParticipants, _ptaParticipants, _supabaseId } = saveData;
+      const SUPA_URL = "https://osjevsltrfcvflhxrvgc.supabase.co";
+      const SUPA_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9zamV2c2x0cmZjdmZsaHhydmdjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2MTcyODAsImV4cCI6MjA4ODE5MzI4MH0.NZFyz81Kh9kPfBx6suAbHSCrym-ruCfH8u32riAj51I";
+
+      // CRITICAL FIX: main-PATCH REMOVED ENTIRELY.
+      // Proven: main-PATCH always returns 503 and causes user-row data loss ~2s later.
+      // When main-PATCH was blocked, user data survived. When active, data was overwritten.
+      // Root cause likely: 503 triggers Supabase internal retry/realtime that corrupts user row.
+      // Assignments are now saved IN the user row alongside evals, so nothing is lost.
+      console.log("[doSave] main-PATCH DISABLED — assignments saved in user row instead");
+
+      // Save evals + assignments to own row — single PATCH, no interference
+      const userSave = {
+        evals: _evals,
+        apoEvals: _apoEvals,
+        program: _program,
+        userEmail: _userEmail,
+        tbdAssignments: _tbdAssignments,
+        apoAssignments: _apoAssignments,
+        apoParticipants: _apoParticipants,
+        ptaParticipants: _ptaParticipants
+      };
+      // Deep diagnostic: log exact karin_heisler eval being saved
+      const kh = _evals && _evals["karin_heisler"];
+      console.log("[doSave] karin_heisler keys:", kh ? Object.keys(kh).join(",") : "MISSING", "zusatzinfo:", kh ? kh.zusatzinfo : "N/A");
+      console.log("[doSave] Saving evals to", _supabaseId, "via UPSERT (POST with on_conflict)");
+      let userErr = null;
+      try {
+        const upsertBody = JSON.stringify({ id: _supabaseId, data: userSave, updated_at: new Date().toISOString() });
+        console.log("[doSave] UPSERT body length:", upsertBody.length);
+        const resp = await fetch(SUPA_URL + "/rest/v1/soundingboard", {
+          method: "POST",
+          headers: {
+            "apikey": SUPA_KEY,
+            "Authorization": "Bearer " + SUPA_KEY,
+            "Content-Type": "application/json",
+            "Prefer": "return=representation,resolution=merge-duplicates"
+          },
+          body: upsertBody
+        });
+        if (!resp.ok) {
+          const errText = await resp.text();
+          userErr = { message: "UPSERT " + resp.status + ": " + errText };
+        } else {
+          // Log what the server actually wrote
+          try {
+            const written = await resp.json();
+            const wKh = written[0]?.data?.evals?.karin_heisler || {};
+            console.log("[doSave] SERVER WROTE: rows=" + written.length + " kh.zusatzinfo=" + (wKh.zusatzinfo || "MISSING") + " updated_at=" + written[0]?.updated_at);
+          } catch(e) { console.log("[doSave] Could not parse response:", e.message); }
+        }
+      } catch(fetchErr) {
+        userErr = { message: "fetch error: " + fetchErr.message };
+      }
+      console.log("Save user (" + _supabaseId + "):", userErr ? "ERROR: " + userErr.message : "OK");
+      updateSyncStatus(userErr ? "error" : "synced");
+    } catch(e) { console.error("Save catch:", e); updateSyncStatus("error"); }
+    finally {
+      isSaving.current = false;
+      // CRITICAL: If more data came in while we were saving, save it now
+      const queued = pendingDataRef.current;
+      if (queued) {
+        pendingDataRef.current = null;
+        console.log("[doSave] Retrying queued save...");
+        setTimeout(() => doSaveRef.current(queued), 50);
+      }
+    }
+  }, [supabase, sessionMode, updateSyncStatus]);
+  doSaveRef.current = doSave;
+
+  // --- MANUAL SAVE: User clicks "Speichern" button ---
+  // No more auto-save on every keystroke — this avoids race conditions with visibility/unload handlers
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [saveButtonFlash, setSaveButtonFlash] = useState("");
+  const loadSettled = useRef(false);
+
+  // Mark load as settled 3 seconds after data loads — prevents false "unsaved" detection
+  useEffect(() => {
+    if (syncStatusRef.current !== "loading" && !loadSettled.current) {
+      const t = setTimeout(() => { loadSettled.current = true; console.log("[CHANGE] Load settled, now tracking changes"); }, 3000);
+      return () => clearTimeout(t);
+    }
+  });
+
+  // Track when data changes (only after initial load has fully settled)
+  useEffect(() => {
+    if (!supabase || !sessionMode) return;
+    if (!loadSettled.current) return;
+    setHasUnsavedChanges(true);
+    console.log("[CHANGE] Data changed, marking unsaved");
   }, [evals, apoEvals, program, tbdAssignments, apoAssignments, apoParticipants, ptaParticipants]);
+
+  // Manual save function — called by "Speichern" button
+  const handleManualSave = useCallback(async () => {
+    if (!supabase || !sessionMode) return;
+    const saveData = { _evals: evals, _apoEvals: apoEvals, _program: program, _userEmail: userEmail, _tbdAssignments: tbdAssignments, _apoAssignments: apoAssignments, _apoParticipants: apoParticipants, _ptaParticipants: ptaParticipants, _supabaseId: supabaseId };
+    // Blur active field to capture latest value
+    if (document.activeElement && document.activeElement.tagName === "TEXTAREA") {
+      document.activeElement.blur();
+    }
+    await doSave(saveData);
+    pendingDataRef.current = null;
+    setHasUnsavedChanges(false);
+    setSaveButtonFlash("saved");
+    setTimeout(() => setSaveButtonFlash(""), 2000);
+  }, [evals, apoEvals, program, userEmail, tbdAssignments, apoAssignments, apoParticipants, ptaParticipants, supabaseId, doSave, supabase, sessionMode]);
+
+  // Flush pending save immediately (used before navigation between screens)
+  const flushSave = useCallback(async () => {
+    if (pendingDataRef.current) {
+      console.log("[flushSave] Saving unsaved data before navigation");
+      await doSave(pendingDataRef.current);
+      pendingDataRef.current = null;
+      setHasUnsavedChanges(false);
+    }
+  }, [doSave]);
+
+  // beforeunload and visibilitychange handlers REMOVED entirely.
+  // They were causing data loss by overwriting good data with stale data on page reload.
+  // Manual save buttons ("Speichern", "Weiter & Speichern") are the only save mechanism now.
 
   const currentParticipants = program === "apo" ? apoParticipants : ptaParticipants;
   const currentEvals = program === "apo" ? apoEvals : evals;
@@ -1562,7 +1861,8 @@ function App() {
   const isApoSlot = program === "apo"; // All apo slots are assignable
 
   const p = currentParticipants[idx] || currentParticipants[0];
-  const ev = currentEvals[p.key] || {};
+  const EMPTY_EVAL = useMemo(() => ({}), []);
+  const ev = currentEvals[p.key] || EMPTY_EVAL;
   const done = currentParticipants.filter(x => currentEvals[x.key]?.entscheidung).length;
 
   // Pre-fill partnerprogramm and pta_family from known data when first visiting a participant
@@ -1574,27 +1874,35 @@ function App() {
     const key = p.key;
     const info = currentInfo[key];
     const assign = currentAssignments[key];
-    // For apo: use assignment data (partner from suggestion), for pta: use static info
     const partnerSource = program === "apo" && assign ? assign : info;
-    const cur = currentEvals[key] || {};
-    const updates = {};
-    // Always sync readonly fields from master data
-    if (partnerSource && (partnerSource.partner === true || partnerSource.partner === false)) {
-      const val = partnerSource.partner ? "Ja" : "Nein";
-      if (cur.partnerprogramm !== val) updates.partnerprogramm = val;
-    }
-    if (program === "pta" && info && (info.ptaFamily === true || info.ptaFamily === false)) {
-      const val = info.ptaFamily ? "Ja" : "Nein";
-      if (cur.pta_family !== val) updates.pta_family = val;
-    }
-    if (Object.keys(updates).length > 0) {
-      setCurrentEvals(prev => ({ ...prev, [key]: { ...prev[key], ...updates } }));
-    }
+    setCurrentEvals(prev => {
+      const cur = prev[key] || {};
+      const updates = {};
+      if (partnerSource && (partnerSource.partner === true || partnerSource.partner === false)) {
+        const val = partnerSource.partner ? "Ja" : "Nein";
+        if (cur.partnerprogramm !== val) updates.partnerprogramm = val;
+      }
+      if (program === "pta" && info && (info.ptaFamily === true || info.ptaFamily === false)) {
+        const val = info.ptaFamily ? "Ja" : "Nein";
+        if (cur.pta_family !== val) updates.pta_family = val;
+      }
+      if (Object.keys(updates).length > 0) {
+        return { ...prev, [key]: { ...cur, ...updates } };
+      }
+      return prev; // No change → no re-render → no unnecessary save
+    });
   }, [idx, view, p.key, program, currentAssignments]);
 
+  const pKeyRef = useRef(p.key);
+  pKeyRef.current = p.key;
   const update = useCallback((val) => {
-    setCurrentEvals(prev => ({ ...prev, [p.key]: val }));
-  }, [p.key, program]);
+    console.log("[App] update called for key:", pKeyRef.current, "zusatzinfo:", val?.zusatzinfo, "entscheidung:", val?.entscheidung, "allKeys:", val ? Object.keys(val).join(",") : "null");
+    setCurrentEvals(prev => {
+      const next = { ...prev, [pKeyRef.current]: val };
+      console.log("[App] setCurrentEvals: karin_heisler.zusatzinfo AFTER:", next["karin_heisler"]?.zusatzinfo);
+      return next;
+    });
+  }, [setCurrentEvals]);
 
   const downloadExcelGlobal = useCallback(() => {
     const headers = program === "apo"
@@ -1627,10 +1935,10 @@ function App() {
   }, [currentEvals, program, sessionMode, userEmail]);
 
   if (view === "password") {
-    return <PasswordScreen onUnlock={({ mode, email }) => { setSessionMode(mode); setUserEmail(email); setView("select_program"); }} />;
+    return <PasswordScreen onUnlock={async ({ mode, email }) => { await flushSave(); setSessionMode(mode); setUserEmail(email); setView("select_program"); }} />;
   }
   if (view === "select_program") {
-    return <ProgramSelector onSelect={(prog) => { setProgram(prog); setIdx(0); setView("eval"); }} />;
+    return <ProgramSelector onSelect={async (prog) => { await flushSave(); setProgram(prog); setIdx(0); setView("eval"); }} />;
   }
   if (view === "auswertung") {
     return <Auswertung
@@ -1664,7 +1972,7 @@ function App() {
           <span style={{ fontFamily: "Trebuchet MS, sans-serif", fontSize: 12, color: program === "apo" ? ORANGE : "#9CA3AF", background: program === "apo" ? "#FFF8EE" : "#F3F4F6", padding: "2px 8px", borderRadius: 4, fontWeight: 600 }}>
             {program === "apo" ? "APO THINK!" : "PTA THINK!"}
           </span>
-          <button onClick={() => { setView("select_program"); setIdx(0); }} style={{
+          <button onClick={async () => { await flushSave(); setView("select_program"); setIdx(0); }} style={{
             padding: "3px 8px", borderRadius: 4, border: "1px solid #E5E7EB",
             background: "transparent", color: "#9CA3AF", fontFamily: "Trebuchet MS, sans-serif",
             fontSize: 10, cursor: "pointer"
@@ -1693,16 +2001,15 @@ function App() {
               {userEmail}
             </span>
           )}
-          <div style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, color: syncStatus === "error" ? "#EF4444" : "#9CA3AF" }} title={syncStatus === "synced" ? "Gespeichert" : syncStatus === "saving" ? "Speichert..." : syncStatus === "error" ? "Sync-Fehler" : "Laden..."}>
-            <span style={{ width: 8, height: 8, borderRadius: "50%", background: syncStatus === "synced" ? "#10B981" : syncStatus === "saving" ? ORANGE : syncStatus === "error" ? "#EF4444" : "#9CA3AF" }}></span>
-            {syncStatus === "synced" ? "Gespeichert" : syncStatus === "saving" ? "Speichert..." : syncStatus === "error" ? "Sync-Fehler" : "Laden..."}
+          <div ref={syncIndicatorRef} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, color: "#9CA3AF" }}>
+            <span className="sync-dot" style={{ width: 8, height: 8, borderRadius: "50%", background: "#9CA3AF", display: "inline-block" }}></span>
+            <span className="sync-text">Laden...</span>
           </div>
-          <button onClick={() => setView(view === "eval" ? "summary" : "eval")} style={{
-            padding: "7px 16px", borderRadius: 6, border: "1.5px solid " + PETROL,
-            background: view === "summary" ? PETROL : "#fff",
-            color: view === "summary" ? "#fff" : PETROL,
-            fontFamily: "Trebuchet MS, sans-serif", fontSize: 13, fontWeight: 600, cursor: "pointer"
-          }}>{view === "summary" ? "\u2190 Zur\u00fcck" : "\u2713 Fertig"}</button>
+          <button onClick={async () => { await handleManualSave(); setEvals({}); setApoEvals({}); setProgram(null); setIdx(0); setSessionMode(null); setUserEmail(null); setView("password"); }} style={{
+            padding: "4px 10px", borderRadius: 5, border: "1px solid #EF444440",
+            background: "#fff", color: "#EF4444", fontFamily: "Trebuchet MS, sans-serif",
+            fontSize: 11, fontWeight: 600, cursor: "pointer"
+          }}>Abmelden</button>
           <button onClick={() => setView("auswertung")} style={{
             padding: "7px 16px", borderRadius: 6, border: "1.5px solid #D97706",
             background: "#FEF3C7", color: "#D97706",
@@ -1748,14 +2055,17 @@ function App() {
           <div style={{ flex: 1, overflowY: "auto" }}><Summary
             participants={currentParticipants} evaluations={currentEvals}
             tbdAssignments={currentAssignments} participantInfo={currentInfo} program={program}
+            onBack={() => setView("eval")}
             onSwitchToApo={() => { setProgram("apo"); setIdx(0); setView("eval"); }}
+            onAuswertung={() => setView("auswertung")}
             allEvals={{ pta: evals, apo: apoEvals }}
             allParticipants={{ pta: PARTICIPANTS, apo: APO_PARTICIPANTS_TEMPLATE, ptaAssignments: tbdAssignments, apoAssignments: apoAssignments }}
             sessionMode={sessionMode} userEmail={userEmail}
           /></div>
         ) : (
-          <div style={{ flex: 1, overflowY: "auto", display: "flex", justifyContent: "center" }}>
-            <div style={{ width: "100%", maxWidth: 620, padding: "24px 28px 40px" }}>
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+            <div style={{ flex: 1, overflowY: "auto", display: "flex", justifyContent: "center" }}>
+            <div style={{ width: "100%", maxWidth: 620, padding: "24px 28px 20px" }}>
               {/* Person header with LARGE photo + Info */}
               <div style={{ display: "flex", alignItems: "flex-start", gap: 20, marginBottom: 24, padding: "16px 20px", background: "#fff", borderRadius: 12, border: "1px solid #E5E7EB", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
                 {personPhoto ? (
@@ -1801,86 +2111,39 @@ function App() {
                 </div>
               </div>
 
-              {/* PTA: TBD Name Assignment (only TBD2) */}
-              {program === "pta" && p.key === "tbd2" && (
-                <TbdNameInput
-                  participantKey={p.key}
-                  currentName={displayName}
-                  participants={currentParticipants}
-                  tbdAssignments={tbdAssignments}
-                  onAssign={(data) => {
-                    if (data) {
-                      setTbdAssignments(prev => ({ ...prev, [p.key]: data }));
-                      PARTICIPANT_INFO[p.key] = {
-                        apotheke: data.apotheke || "", ort: data.ort || "", plz: data.plz || "",
-                        partner: data.partner || false, ptaFamily: data.ptaFamily || false,
-                        kooperation: data.kooperation || "", adm: data.adm || ""
-                      };
-                      setInitialized(prev => { const n = {...prev}; delete n[p.key + "_pta"]; return n; });
-                    } else {
-                      setTbdAssignments(prev => { const n = {...prev}; delete n[p.key]; return n; });
-                      PARTICIPANT_INFO[p.key] = { apotheke: "", ort: "", plz: "", partner: false, ptaFamily: false, kooperation: "", adm: "" };
-                    }
-                  }}
-                />
-              )}
-              {/* Apo: free text Vorname/Nachname/Apotheke */}
-              {program === "apo" && (
-                <ApoNameInput
-                  key={p.key}
-                  initialData={currentAssignments[p.key] || null}
-                  apoAssignments={apoAssignments}
-                  participantKey={p.key}
-                  onAssign={(data) => {
-                    if (data) {
-                      setApoAssignments(prev => ({ ...prev, [p.key]: data }));
-                      APO_PARTICIPANT_INFO[p.key] = { apotheke: data.apotheke || "", ort: data.ort || "", plz: data.plz || "", partner: data.partner || false, kooperation: data.kooperation || "", adm: data.adm || "" };
-                    } else {
-                      setApoAssignments(prev => { const n = {...prev}; delete n[p.key]; return n; });
-                      APO_PARTICIPANT_INFO[p.key] = { apotheke: "", ort: "", plz: "", partner: false, kooperation: "", adm: "" };
-                    }
-                  }}
-                />
-              )}
+              {/* Zuordnung entfernt — alle bereits zugeordnet (PTA + APO) */}
 
               {/* Form */}
               <div style={{ background: "#fff", borderRadius: 10, padding: "24px 28px", boxShadow: "0 1px 3px rgba(0,0,0,0.05)", border: "1px solid #E5E7EB" }}>
                 <EvalForm evaluation={ev} onUpdate={update} criteria={currentCriteria} />
               </div>
+            </div>
+            </div>
 
-              {/* Navigation */}
-              {/* Navigation */}
-              <div style={{ display: "flex", justifyContent: "space-between", marginTop: 20 }}>
-                <button onClick={() => idx > 0 && setIdx(idx - 1)} disabled={idx === 0} style={{
-                  padding: "10px 22px", borderRadius: 6, border: "1.5px solid #D1D5DB",
-                  background: "#fff", color: idx === 0 ? "#D1D5DB" : BLACK,
-                  fontFamily: "Trebuchet MS, sans-serif", fontSize: 14, fontWeight: 600,
-                  cursor: idx === 0 ? "default" : "pointer", opacity: idx === 0 ? 0.4 : 1
-                }}>{"\u2190"} Zur{"\u00fc"}ck</button>
-                <button onClick={() => idx < currentParticipants.length - 1 && setIdx(idx + 1)}
-                  disabled={idx === currentParticipants.length - 1} style={{
-                  padding: "10px 22px", borderRadius: 6, border: "none",
-                  background: idx === currentParticipants.length - 1 ? "#D1D5DB" : (program === "apo" ? ORANGE : PETROL), color: "#fff",
-                  fontFamily: "Trebuchet MS, sans-serif", fontSize: 14, fontWeight: 600,
-                  cursor: idx === currentParticipants.length - 1 ? "default" : "pointer",
-                  opacity: idx === currentParticipants.length - 1 ? 0.4 : 1
-                }}>Weiter {"\u2192"}</button>
-              </div>
-
-              {/* Excel + Zusammenfassung Buttons */}
-              <div style={{ display: "flex", gap: 10, marginTop: 16, paddingBottom: 24 }}>
-                <button onClick={downloadExcelGlobal} style={{
-                  flex: 1, padding: "12px 16px", borderRadius: 8, border: "1.5px solid " + PETROL,
-                  background: "#fff", color: PETROL,
-                  fontFamily: "Trebuchet MS, sans-serif", fontSize: 14, fontWeight: 600, cursor: "pointer",
-                  display: "flex", alignItems: "center", justifyContent: "center", gap: 8
-                }}>Excel herunterladen</button>
-                <button onClick={() => setView("summary")} style={{
-                  flex: 1, padding: "12px 16px", borderRadius: 8, border: "none",
-                  background: ORANGE, color: "#fff",
-                  fontFamily: "Trebuchet MS, sans-serif", fontSize: 14, fontWeight: 600, cursor: "pointer",
-                  display: "flex", alignItems: "center", justifyContent: "center", gap: 8
-                }}>{"\u2713"} Fertig</button>
+            {/* Sticky Navigation Footer */}
+            <div style={{ borderTop: "1px solid #E5E7EB", background: "#fff", padding: "12px 28px", display: "flex", justifyContent: "center" }}>
+              <div style={{ width: "100%", maxWidth: 620, display: "flex", flexDirection: "column", gap: 8 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+                  <button onClick={async () => { if (idx > 0) { await handleManualSave(); setIdx(idx - 1); } }} disabled={idx === 0} style={{
+                    padding: "10px 22px", borderRadius: 6, border: "1.5px solid #D1D5DB",
+                    background: "#fff", color: idx === 0 ? "#D1D5DB" : BLACK,
+                    fontFamily: "Trebuchet MS, sans-serif", fontSize: 14, fontWeight: 600,
+                    cursor: idx === 0 ? "default" : "pointer", opacity: idx === 0 ? 0.4 : 1
+                  }}>{"\u2190"} Zur{"\u00fc"}ck</button>
+                  <button onClick={async () => { await handleManualSave(); setView("summary"); }} style={{
+                    padding: "10px 16px", borderRadius: 6, border: "none",
+                    background: ORANGE, color: "#fff",
+                    fontFamily: "Trebuchet MS, sans-serif", fontSize: 13, fontWeight: 600, cursor: "pointer"
+                  }}>{"\u2713"} Fertig</button>
+                  <button onClick={async () => { if (idx < currentParticipants.length - 1) { await handleManualSave(); setIdx(idx + 1); } }}
+                    disabled={idx === currentParticipants.length - 1} style={{
+                    padding: "10px 22px", borderRadius: 8, border: "none",
+                    background: idx === currentParticipants.length - 1 ? "#D1D5DB" : (program === "apo" ? ORANGE : PETROL), color: "#fff",
+                    fontFamily: "Trebuchet MS, sans-serif", fontSize: 15, fontWeight: 700,
+                    cursor: idx === currentParticipants.length - 1 ? "default" : "pointer",
+                    opacity: idx === currentParticipants.length - 1 ? 0.4 : 1
+                  }}>Weiter & Speichern {"\u2192"}</button>
+                </div>
               </div>
             </div>
           </div>
