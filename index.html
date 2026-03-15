@@ -49,7 +49,7 @@ const PARTICIPANTS = [{"key":"karin_heisler","name":"Karin Heisler"},{"key":"chr
 const PARTICIPANT_INFO = {
   karin_heisler: { apotheke: "Antonius-Apotheke", ort: "Sankt Augustin", plz: "53757", partner: false, ptaFamily: false, kooperation: "", adm: "Kristina Roth" },
   christiane_wanders: { apotheke: "Nordstern-Apotheke", ort: "Essen", plz: "45329", partner: true, ptaFamily: true, kooperation: "", adm: "Sonja van der Grinten" },
-  lisa_roesmann: { apotheke: "Süd-Apotheke", ort: "Münster", plz: "48153", partner: true, ptaFamily: false, kooperation: "Migasa", adm: "Sabine Steuer" },
+  lisa_roesmann: { apotheke: "S\u00fcd-Apotheke", ort: "M\u00fcnster", plz: "48153", partner: true, ptaFamily: false, kooperation: "Migasa", adm: "Sabine Steuer" },
   angelina_leitgebel: { apotheke: "Farma plus Apotheke Hellweg", ort: "Bochum", plz: "44894", partner: true, ptaFamily: false, kooperation: "farma-plus", adm: "Sonja van der Grinten" },
   carina_froembgen: { apotheke: "Adler-Apotheke", ort: "Hennef", plz: "53773", partner: true, ptaFamily: false, kooperation: "", adm: "Kristina Roth" },
   manuela_koch: { apotheke: "Fuchs-Apotheke", ort: "Radevormwald", plz: "42477", partner: false, ptaFamily: true, kooperation: "Migasa", adm: "Sonja van der Grinten" },
@@ -80,7 +80,7 @@ const ALL_PARTICIPANTS_LOOKUP = [
   { vorname: "Frederike", nachname: "Frink", apotheke: "Regenbogen Apotheke", ort: "Remscheid", plz: "42859", partner: true, ptaFamily: false, kooperation: "", adm: "Leon Habring" },
   { vorname: "Lene", nachname: "Lehmann", apotheke: "Easy Apotheke", ort: "Remscheid-Lennep", plz: "42897", partner: false, ptaFamily: false, kooperation: "Easy", adm: "Leon Habring" },
   { vorname: "Julia", nachname: "Eckey", apotheke: "Apo im P\u00dcD", ort: "Dortmund", plz: "44359", partner: true, ptaFamily: false, kooperation: "vitasco", adm: "Sabine Steuer" },
-  { vorname: "Sandra", nachname: "Krämer", apotheke: "Scheibner Apo im Globus", ort: "Castrop-Rauxel", plz: "44579", partner: true, ptaFamily: false, kooperation: "vitasco", adm: "Jacqueline Torres" },
+  { vorname: "Sandra", nachname: "Kr\u00e4mer", apotheke: "Scheibner Apo im Globus", ort: "Castrop-Rauxel", plz: "44579", partner: true, ptaFamily: false, kooperation: "vitasco", adm: "Jacqueline Torres" },
   { vorname: "Katrin", nachname: "Deutsch", apotheke: "Holtkamp Apo", ort: "Sankt Augustin", plz: "53757", partner: true, ptaFamily: true, kooperation: "", adm: "Kristina Roth" },
   { vorname: "Mareike", nachname: "Braach", apotheke: "Schloss Apo", ort: "Siegen", plz: "57072", partner: false, ptaFamily: false, kooperation: "Elac", adm: "Kristina Roth" },
   { vorname: "Jessica", nachname: "Wulf", apotheke: "Safari-Apotheke", ort: "Schlo\u00df Holte-Stukenbrock", plz: "33758", partner: true, ptaFamily: true, kooperation: "", adm: "Lydia Asmus" },
@@ -1672,7 +1672,7 @@ function App() {
             if (migrated[oldKey] && !migrated[newKey]) {
               migrated[newKey] = migrated[oldKey];
               delete migrated[oldKey];
-              console.log("[MIGRATION] Renamed eval key:", oldKey, "→", newKey);
+              console.log("[MIGRATION] Renamed eval key:", oldKey, "->", newKey);
             } else if (migrated[oldKey] && migrated[newKey]) {
               delete migrated[oldKey];
               console.log("[MIGRATION] Removed duplicate old key:", oldKey);
